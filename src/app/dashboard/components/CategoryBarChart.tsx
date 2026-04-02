@@ -1,19 +1,23 @@
 'use client';
 
 import React from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,  } from 'recharts';
-import { ASSETS } from '@/lib/mockData';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Asset } from '@/lib/mockData';
 
-function buildCategoryData() {
+interface CategoryBarChartProps {
+  assets: Asset[];
+}
+
+function buildCategoryData(assets: Asset[]) {
   const counts: Record<string, { total: number; available: number; assigned: number; faulty: number }> = {};
-  for (const asset of ASSETS) {
+  for (const asset of assets) {
     if (!counts[asset.category]) {
       counts[asset.category] = { total: 0, available: 0, assigned: 0, faulty: 0 };
     }
     counts[asset.category].total += 1;
     if (asset.status === 'Available') counts[asset.category].available += 1;
-    if (asset.status === 'Assigned') counts[asset.category].assigned += 1;
-    if (asset.status === 'Faulty') counts[asset.category].faulty += 1;
+    if (asset.status === 'Assigned')  counts[asset.category].assigned  += 1;
+    if (asset.status === 'Faulty')    counts[asset.category].faulty    += 1;
   }
   return Object.entries(counts).map(([name, v]) => ({ name, ...v }));
 }
@@ -34,8 +38,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-export default function CategoryBarChart() {
-  const data = buildCategoryData();
+export default function CategoryBarChart({ assets }: CategoryBarChartProps) {
+  const data = buildCategoryData(assets);
 
   return (
     <div className="card p-5 h-full">
@@ -75,9 +79,9 @@ export default function CategoryBarChart() {
             allowDecimals={false}
           />
           <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsl(210 40% 96%)' }} />
-          <Bar dataKey="total" fill="hsl(221 83% 53%)" radius={[4, 4, 0, 0]} maxBarSize={36} />
+          <Bar dataKey="total"     fill="hsl(221 83% 53%)" radius={[4, 4, 0, 0]} maxBarSize={36} />
           <Bar dataKey="available" fill="hsl(142 71% 45%)" radius={[4, 4, 0, 0]} maxBarSize={36} />
-          <Bar dataKey="faulty" fill="hsl(0 84% 60%)" radius={[4, 4, 0, 0]} maxBarSize={36} />
+          <Bar dataKey="faulty"    fill="hsl(0 84% 60%)"   radius={[4, 4, 0, 0]} maxBarSize={36} />
         </BarChart>
       </ResponsiveContainer>
     </div>

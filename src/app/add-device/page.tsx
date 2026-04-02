@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import AppLayout from '@/components/AppLayout';
-import { Asset, AssetCategory, AssetStatus, ASSETS } from '@/lib/mockData';
+import { Asset, AssetCategory, AssetStatus } from '@/lib/mockData';
 import { ArrowLeft, Plus, Loader2, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
+import { toast } from 'sonner';
+import { Toaster } from 'sonner';
 
 type FormData = Omit<Asset, 'id'>;
 
@@ -16,9 +17,8 @@ const CATEGORIES: AssetCategory[] = [
 const STATUSES: AssetStatus[] = ['Available', 'Assigned', 'Faulty', 'Retired'];
 
 export default function AddDevicePage() {
-  const router = useRouter();
   const [submitted, setSubmitted] = useState(false);
-  const [addedTag, setAddedTag] = useState('');
+  const [addedTag, setAddedTag]   = useState('');
 
   const {
     register,
@@ -27,18 +27,26 @@ export default function AddDevicePage() {
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     defaultValues: {
-      status: 'Available',
+      status:   'Available',
       category: 'Laptop',
     },
   });
 
   const onFormSubmit = async (data: FormData) => {
-    await new Promise((r) => setTimeout(r, 500));
-    const newAsset: Asset = { ...data, id: `asset-${Date.now()}` };
-    // In a real app: POST /api/assets
-    // For now, push to mock data array
-    ASSETS.unshift(newAsset);
-    setAddedTag(newAsset.assetTag);
+    const res = await fetch('/api/assets', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      toast.error(err.error ?? 'Failed to add asset. Please try again.');
+      return;
+    }
+
+    const row = await res.json();
+    setAddedTag(row.asset_tag);
     setSubmitted(true);
   };
 
@@ -50,6 +58,7 @@ export default function AddDevicePage() {
 
   return (
     <AppLayout>
+      <Toaster position="bottom-right" richColors />
       <div className="px-6 lg:px-8 xl:px-10 py-6 max-w-3xl mx-auto space-y-6">
         {/* Page Header */}
         <div className="flex items-center gap-3">
@@ -60,9 +69,7 @@ export default function AddDevicePage() {
           </Link>
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Add New Device</h1>
-            <p className="text-sm text-slate-500 mt-0.5">
-              Register a new IT asset to the inventory
-            </p>
+            <p className="text-sm text-slate-500 mt-0.5">Register a new IT asset to the inventory</p>
           </div>
         </div>
 
@@ -94,7 +101,7 @@ export default function AddDevicePage() {
           </div>
         ) : (
           <form onSubmit={handleSubmit(onFormSubmit)} className="card p-6 space-y-6">
-            {/* Section: Identification */}
+            {/* Asset Identification */}
             <div>
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
                 Asset Identification
@@ -131,7 +138,7 @@ export default function AddDevicePage() {
 
             <hr className="border-slate-100" />
 
-            {/* Section: Device Details */}
+            {/* Device Details */}
             <div>
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
                 Device Details
@@ -152,23 +159,15 @@ export default function AddDevicePage() {
                   {errors.name && <p className="form-error">{errors.name.message}</p>}
                 </div>
                 <div>
-                  <label className="form-label">
-                    Category <span className="text-red-500">*</span>
-                  </label>
+                  <label className="form-label">Category <span className="text-red-500">*</span></label>
                   <select {...register('category', { required: true })} className="form-input">
-                    {CATEGORIES.map((c) => (
-                      <option key={`cat-${c}`} value={c}>{c}</option>
-                    ))}
+                    {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="form-label">
-                    Status <span className="text-red-500">*</span>
-                  </label>
+                  <label className="form-label">Status <span className="text-red-500">*</span></label>
                   <select {...register('status', { required: true })} className="form-input">
-                    {STATUSES.map((s) => (
-                      <option key={`status-${s}`} value={s}>{s}</option>
-                    ))}
+                    {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                 <div>
@@ -199,7 +198,7 @@ export default function AddDevicePage() {
 
             <hr className="border-slate-100" />
 
-            {/* Section: Assignment (optional) */}
+            {/* Assignment (optional) */}
             <div>
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
                 Assignment (Optional)
@@ -210,27 +209,15 @@ export default function AddDevicePage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="form-label">Staff Name</label>
-                  <input
-                    {...register('assignedTo')}
-                    placeholder="e.g. Marcus Osei"
-                    className="form-input"
-                  />
+                  <input {...register('assignedTo')} placeholder="e.g. Marcus Osei" className="form-input" />
                 </div>
                 <div>
                   <label className="form-label">Staff ID</label>
-                  <input
-                    {...register('assignedToId')}
-                    placeholder="e.g. EMP-1042"
-                    className="form-input font-mono"
-                  />
+                  <input {...register('assignedToId')} placeholder="e.g. EMP-1042" className="form-input font-mono" />
                 </div>
                 <div>
                   <label className="form-label">Department</label>
-                  <input
-                    {...register('department')}
-                    placeholder="e.g. Engineering"
-                    className="form-input"
-                  />
+                  <input {...register('department')} placeholder="e.g. Engineering" className="form-input" />
                 </div>
               </div>
             </div>
@@ -251,16 +238,12 @@ export default function AddDevicePage() {
               />
             </div>
 
-            {/* Footer Actions */}
+            {/* Footer */}
             <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
               <Link href="/inventory-management">
                 <span className="btn-secondary">Cancel</span>
               </Link>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="btn-primary gap-2"
-              >
+              <button type="submit" disabled={isSubmitting} className="btn-primary gap-2">
                 {isSubmitting ? (
                   <>
                     <Loader2 size={15} className="animate-spin" />

@@ -2,21 +2,17 @@
 
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { ASSETS } from '@/lib/mockData';
+import { Asset } from '@/lib/mockData';
 
-function buildStatusData() {
-  const counts: Record<string, number> = {};
-  for (const asset of ASSETS) {
-    counts[asset.status] = (counts[asset.status] ?? 0) + 1;
-  }
-  return Object.entries(counts).map(([name, value]) => ({ name, value }));
+interface StatusDonutChartProps {
+  assets: Asset[];
 }
 
 const STATUS_COLORS: Record<string, string> = {
   Available: 'hsl(142 71% 45%)',
-  Assigned: 'hsl(221 83% 53%)',
-  Faulty: 'hsl(0 84% 60%)',
-  Retired: 'hsl(215 16% 65%)',
+  Assigned:  'hsl(221 83% 53%)',
+  Faulty:    'hsl(0 84% 60%)',
+  Retired:   'hsl(215 16% 65%)',
 };
 
 const CustomTooltip = ({ active, payload }: any) => {
@@ -31,9 +27,13 @@ const CustomTooltip = ({ active, payload }: any) => {
   );
 };
 
-export default function StatusDonutChart() {
-  const data = buildStatusData();
-  const total = data.reduce((s, d) => s + d.value, 0);
+export default function StatusDonutChart({ assets }: StatusDonutChartProps) {
+  const counts: Record<string, number> = {};
+  for (const asset of assets) {
+    counts[asset.status] = (counts[asset.status] ?? 0) + 1;
+  }
+  const data  = Object.entries(counts).map(([name, value]) => ({ name, value }));
+  const total = assets.length;
 
   return (
     <div className="card p-5 h-full">
@@ -64,7 +64,6 @@ export default function StatusDonutChart() {
             <Tooltip content={<CustomTooltip />} />
           </PieChart>
         </ResponsiveContainer>
-        {/* Center label */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="text-center">
             <p className="text-2xl font-bold text-slate-900 tabular-nums">{total}</p>
@@ -86,7 +85,7 @@ export default function StatusDonutChart() {
             <div className="flex items-center gap-2">
               <span className="font-semibold text-slate-800 tabular-nums">{entry.value}</span>
               <span className="text-slate-400 tabular-nums w-8 text-right">
-                {Math.round((entry.value / total) * 100)}%
+                {total > 0 ? Math.round((entry.value / total) * 100) : 0}%
               </span>
             </div>
           </div>

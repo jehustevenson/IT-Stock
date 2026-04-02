@@ -1,47 +1,40 @@
 import React from 'react';
-import { AUDIT_LOGS, AuditLog } from '@/lib/mockData';
+import { AuditLog } from '@/lib/mockData';
 import {
-  PlusCircle,
-  UserCheck,
-  RotateCcw,
-  AlertTriangle,
-  Edit3,
-  Trash2,
-  ArrowRight,
+  PlusCircle, UserCheck, RotateCcw,
+  AlertTriangle, Edit3, Trash2, ArrowRight,
 } from 'lucide-react';
 import Link from 'next/link';
-import Icon from '@/components/ui/AppIcon';
 
+interface AuditLogFeedProps {
+  logs: AuditLog[];
+}
 
 const ACTION_CONFIG: Record<
   AuditLog['action'],
   { icon: React.ElementType; color: string; bg: string }
 > = {
-  Added: { icon: PlusCircle, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-  Assigned: { icon: UserCheck, color: 'text-blue-600', bg: 'bg-blue-50' },
-  Returned: { icon: RotateCcw, color: 'text-slate-600', bg: 'bg-slate-100' },
-  Updated: { icon: Edit3, color: 'text-amber-600', bg: 'bg-amber-50' },
-  Deleted: { icon: Trash2, color: 'text-red-600', bg: 'bg-red-50' },
-  Flagged: { icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50' },
+  Added:    { icon: PlusCircle,    color: 'text-emerald-600', bg: 'bg-emerald-50' },
+  Assigned: { icon: UserCheck,     color: 'text-blue-600',    bg: 'bg-blue-50'    },
+  Returned: { icon: RotateCcw,     color: 'text-slate-600',   bg: 'bg-slate-100'  },
+  Updated:  { icon: Edit3,         color: 'text-amber-600',   bg: 'bg-amber-50'   },
+  Deleted:  { icon: Trash2,        color: 'text-red-600',     bg: 'bg-red-50'     },
+  Flagged:  { icon: AlertTriangle, color: 'text-red-600',     bg: 'bg-red-50'     },
 };
 
 function formatTimestamp(ts: string) {
-  const d = new Date(ts);
-  return d.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+  return new Date(ts).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 }
 
-export default function AuditLogFeed() {
+export default function AuditLogFeed({ logs }: AuditLogFeedProps) {
   return (
     <div className="card">
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
         <div>
           <h2 className="text-sm font-semibold text-slate-900">Recent Activity</h2>
-          <p className="text-xs text-slate-500 mt-0.5">Last 8 asset actions across the system</p>
+          <p className="text-xs text-slate-500 mt-0.5">Last {logs.length} asset actions across the system</p>
         </div>
         <Link href="/inventory-management">
           <span className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors">
@@ -50,9 +43,12 @@ export default function AuditLogFeed() {
         </Link>
       </div>
       <div className="divide-y divide-slate-50">
-        {AUDIT_LOGS.map((log) => {
+        {logs.length === 0 && (
+          <p className="px-5 py-8 text-xs text-slate-400 text-center">No activity yet.</p>
+        )}
+        {logs.map((log) => {
           const config = ACTION_CONFIG[log.action];
-          const Icon = config.icon;
+          const Icon   = config.icon;
           return (
             <div
               key={log.id}

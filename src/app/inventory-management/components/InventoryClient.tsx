@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { Toaster } from 'sonner';
-import { Plus, Search, Filter, Download,  } from 'lucide-react';
-import { ASSETS as INITIAL_ASSETS, Asset, AssetStatus, AssetCategory } from '@/lib/mockData';
+import { Plus, Search, Filter, Download, RefreshCw } from 'lucide-react';
+import type { Asset, AssetStatus, AssetCategory } from '@/lib/mockData';
 import AssetTable from './AssetTable';
 import AssetFormModal from './AssetFormModal';
 import QRCodeModal from './QRCodeModal';
@@ -15,8 +15,26 @@ const CATEGORIES: AssetCategory[] = [
 ];
 const STATUSES: AssetStatus[] = ['Available', 'Assigned', 'Faulty', 'Retired'];
 
+function dbRowToAsset(row: Record<string, unknown>): Asset {
+  return {
+    id:            row.id as string,
+    assetTag:      row.asset_tag as string,
+    name:          row.name as string,
+    category:      row.category as AssetCategory,
+    serialNumber:  row.serial_number as string,
+    purchaseDate:  row.purchase_date as string,
+    status:        row.status as AssetStatus,
+    location:      row.location as string,
+    assignedTo:    (row.assigned_to as string) ?? undefined,
+    assignedToId:  (row.assigned_to_id as string) ?? undefined,
+    department:    (row.department as string) ?? undefined,
+    notes:         (row.notes as string) ?? undefined,
+  };
+}
+
 export default function InventoryClient() {
-  const [assets, setAssets] = useState<Asset[]>(INITIAL_ASSETS);
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('All');
   const [filterStatus, setFilterStatus] = useState<string>('All');
@@ -24,13 +42,28 @@ export default function InventoryClient() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Modals
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editAsset, setEditAsset] = useState<Asset | null>(null);
   const [qrAsset, setQrAsset] = useState<Asset | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const fetchAssets = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/assets');
+      if (!res.ok) throw new Error('Failed to load assets');
+      const rows = await res.json();
+      setAssets(rows.map(dbRowToAsset));
+    } catch (err) {
+      toast.error('Could not load assets');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchAssets(); }, [fetchAssets]);
 
   const filtered = useMemo(() => {
     let result = assets;
@@ -62,51 +95,78 @@ export default function InventoryClient() {
     else { setSortKey(key); setSortDir('asc'); }
   }
 
-  function handleAdd(data: Omit<Asset, 'id'>) {
-    const newAsset: Asset = { ...data, id: `asset-${Date.now()}` };
-    // TODO: POST /api/assets
-    setAssets((prev) => [newAsset, ...prev]);
+  async function handleAdd(data: Omit<Asset, 'id'>) {
+    const res = await fetch('/api/assets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) { toast.error('Failed to add asset'); return; }
+    const row = await res.json();
+    setAssets((prev) => [dbRowToAsset(row), ...prev]);
     setAddModalOpen(false);
-    toast.success(`Asset ${newAsset.assetTag} added to inventory`);
+    toast.success(`Asset ${row.asset_tag} added to inventory`);
   }
 
-  function handleEdit(data: Asset) {
-    // TODO: PUT /api/assets/:id
-    setAssets((prev) => prev.map((a) => (a.id === data.id ? data : a)));
+  async function handleEdit(data: Asset) {
+    const res = await fetch(`/api/assets/${data.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) { toast.error('Failed to update asset'); return; }
+    const row = await res.json();
+    setAssets((prev) => prev.map((a) => (a.id === data.id ? dbRowToAsset(row) : a)));
     setEditAsset(null);
-    toast.success(`Asset ${data.assetTag} updated successfully`);
+    toast.success(`Asset ${row.asset_tag} updated successfully`);
   }
 
-  function handleDeleteConfirm() {
+  async function handleDeleteConfirm() {
     if (!deleteId) return;
     setDeleteLoading(true);
-    // TODO: DELETE /api/assets/:id
-    setTimeout(() => {
-      const asset = assets.find((a) => a.id === deleteId);
-      setAssets((prev) => prev.filter((a) => a.id !== deleteId));
-      setDeleteId(null);
-      setDeleteLoading(false);
-      toast.success(`Asset ${asset?.assetTag} removed from inventory`);
-    }, 600);
+    const asset = assets.find((a) => a.id === deleteId);
+    const res = await fetch(`/api/assets/${deleteId}`, { method: 'DELETE' });
+    setDeleteLoading(false);
+    if (!res.ok) { toast.error('Failed to delete asset'); return; }
+    setAssets((prev) => prev.filter((a) => a.id !== deleteId));
+    setDeleteId(null);
+    toast.success(`Asset ${asset?.assetTag} removed from inventory`);
   }
 
-  function handleBulkDelete() {
+  async function handleBulkDelete() {
     setDeleteLoading(true);
-    // TODO: DELETE /api/assets bulk
-    setTimeout(() => {
-      const count = selectedIds.size;
-      setAssets((prev) => prev.filter((a) => !selectedIds.has(a.id)));
-      setSelectedIds(new Set());
-      setBulkDeleteOpen(false);
-      setDeleteLoading(false);
-      toast.success(`${count} assets removed from inventory`);
-    }, 700);
+    const ids = Array.from(selectedIds);
+    await Promise.all(ids.map((id) => fetch(`/api/assets/${id}`, { method: 'DELETE' })));
+    setAssets((prev) => prev.filter((a) => !selectedIds.has(a.id)));
+    setSelectedIds(new Set());
+    setBulkDeleteOpen(false);
+    setDeleteLoading(false);
+    toast.success(`${ids.length} assets removed from inventory`);
   }
 
-  function handleStatusChange(id: string, status: AssetStatus) {
-    // TODO: PATCH /api/assets/:id/status
+  async function handleStatusChange(id: string, status: AssetStatus) {
+    const res = await fetch(`/api/assets/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+    if (!res.ok) { toast.error('Failed to update status'); return; }
     setAssets((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)));
     toast.success('Asset status updated');
+  }
+
+  async function handleExportCSV() {
+    const headers = ['Asset Tag','Name','Category','Serial Number','Status','Location','Purchase Date','Assigned To','Department'];
+    const rows = filtered.map((a) => [
+      a.assetTag, a.name, a.category, a.serialNumber, a.status,
+      a.location, a.purchaseDate, a.assignedTo ?? '', a.department ?? '',
+    ]);
+    const csv = [headers, ...rows].map((r) => r.map((v) => `"${v}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'assets.csv'; a.click();
+    URL.revokeObjectURL(url);
   }
 
   const categoryStats = useMemo(() => {
@@ -119,7 +179,6 @@ export default function InventoryClient() {
     <>
       <Toaster position="bottom-right" richColors />
       <div className="px-6 lg:px-8 xl:px-10 py-6 max-w-screen-2xl mx-auto space-y-5">
-        {/* Page Header */}
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Inventory Management</h1>
@@ -128,7 +187,11 @@ export default function InventoryClient() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button className="btn-secondary text-xs gap-1.5">
+            <button onClick={fetchAssets} className="btn-secondary text-xs gap-1.5" disabled={loading}>
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              Refresh
+            </button>
+            <button onClick={handleExportCSV} className="btn-secondary text-xs gap-1.5">
               <Download size={14} />
               Export CSV
             </button>
@@ -139,7 +202,7 @@ export default function InventoryClient() {
           </div>
         </div>
 
-        {/* Category Filter Chips */}
+        {/* Category chips */}
         <div className="flex items-center gap-2 flex-wrap">
           {(['All', ...CATEGORIES] as const).map((cat) => (
             <button
@@ -152,18 +215,14 @@ export default function InventoryClient() {
               }`}
             >
               {cat}
-              <span
-                className={`tabular-nums ${
-                  filterCategory === cat ? 'text-blue-100' : 'text-slate-400'
-                }`}
-              >
+              <span className={filterCategory === cat ? 'text-blue-100' : 'text-slate-400'}>
                 {categoryStats[cat] ?? 0}
               </span>
             </button>
           ))}
         </div>
 
-        {/* Search + Status Filter Bar */}
+        {/* Search + status filter */}
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -184,8 +243,7 @@ export default function InventoryClient() {
                   key={`status-chip-${s}`}
                   onClick={() => setFilterStatus(s)}
                   className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all duration-150 ${
-                    filterStatus === s
-                      ? 'bg-slate-800 text-white' :'text-slate-500 hover:bg-slate-100'
+                    filterStatus === s ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-100'
                   }`}
                 >
                   {s}
@@ -195,20 +253,12 @@ export default function InventoryClient() {
           </div>
           <div className="ml-auto flex items-center gap-2">
             {selectedIds.size > 0 && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg slide-up">
-                <span className="text-xs font-medium text-red-700">
-                  {selectedIds.size} selected
-                </span>
-                <button
-                  onClick={() => setBulkDeleteOpen(true)}
-                  className="text-xs font-semibold text-red-600 hover:text-red-800 transition-colors"
-                >
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg">
+                <span className="text-xs font-medium text-red-700">{selectedIds.size} selected</span>
+                <button onClick={() => setBulkDeleteOpen(true)} className="text-xs font-semibold text-red-600 hover:text-red-800">
                   Delete Selected
                 </button>
-                <button
-                  onClick={() => setSelectedIds(new Set())}
-                  className="text-xs text-slate-400 hover:text-slate-600"
-                >
+                <button onClick={() => setSelectedIds(new Set())} className="text-xs text-slate-400 hover:text-slate-600">
                   Clear
                 </button>
               </div>
@@ -219,28 +269,27 @@ export default function InventoryClient() {
           </div>
         </div>
 
-        {/* Table */}
-        <AssetTable
-          assets={filtered}
-          selectedIds={selectedIds}
-          onSelectChange={setSelectedIds}
-          sortKey={sortKey}
-          sortDir={sortDir}
-          onSort={handleSort}
-          onEdit={setEditAsset}
-          onDelete={setDeleteId}
-          onQR={setQrAsset}
-          onStatusChange={handleStatusChange}
-        />
+        {loading ? (
+          <div className="card flex items-center justify-center py-16">
+            <RefreshCw size={20} className="animate-spin text-slate-400" />
+          </div>
+        ) : (
+          <AssetTable
+            assets={filtered}
+            selectedIds={selectedIds}
+            onSelectChange={setSelectedIds}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            onSort={handleSort}
+            onEdit={setEditAsset}
+            onDelete={setDeleteId}
+            onQR={setQrAsset}
+            onStatusChange={handleStatusChange}
+          />
+        )}
       </div>
 
-      {/* Modals */}
-      <AssetFormModal
-        open={addModalOpen}
-        onClose={() => setAddModalOpen(false)}
-        onSubmit={handleAdd}
-        mode="add"
-      />
+      <AssetFormModal open={addModalOpen} onClose={() => setAddModalOpen(false)} onSubmit={handleAdd} mode="add" />
       {editAsset && (
         <AssetFormModal
           open={!!editAsset}
@@ -250,19 +299,13 @@ export default function InventoryClient() {
           defaultValues={editAsset}
         />
       )}
-      {qrAsset && (
-        <QRCodeModal
-          open={!!qrAsset}
-          onClose={() => setQrAsset(null)}
-          asset={qrAsset}
-        />
-      )}
+      {qrAsset && <QRCodeModal open={!!qrAsset} onClose={() => setQrAsset(null)} asset={qrAsset} />}
       <ConfirmModal
         open={!!deleteId}
         onClose={() => setDeleteId(null)}
         onConfirm={handleDeleteConfirm}
         title="Delete Asset"
-        message={`Are you sure you want to remove this asset from inventory? This action cannot be undone and will also remove all associated assignment records.`}
+        message="Are you sure you want to remove this asset from inventory? This action cannot be undone and will also remove all associated assignment records."
         confirmLabel="Delete Asset"
         loading={deleteLoading}
       />
