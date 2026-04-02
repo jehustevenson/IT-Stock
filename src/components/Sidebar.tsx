@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import AppLogo from '@/components/ui/AppLogo';
@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import Icon from '@/components/ui/AppIcon';
 import { ASSIGNMENTS } from '@/lib/mockData';
+import { createClient } from '@/lib/supabase/client';
+import { signOut } from '@/app/auth/actions';
 
 // Compute badge: count of Active + Overdue assignments
 function getAssignmentBadge(): number | null {
@@ -27,7 +29,7 @@ function getAssignmentBadge(): number | null {
   return count > 0 ? count : null;
 }
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
   {
     id: 'nav-dashboard',
     label: 'Dashboard',
@@ -54,7 +56,7 @@ const NAV_ITEMS = [
     label: 'Assignments',
     href: '/assignment-tracking',
     icon: ClipboardList,
-    badge: getAssignmentBadge(),
+    badge: null as number | null,
   },
 ];
 
@@ -62,16 +64,48 @@ const BOTTOM_ITEMS = [
   { id: 'nav-settings', label: 'Settings', href: '#', icon: Settings },
 ];
 
-export default function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
-  const pathname = usePathname();
-
-  // Re-derive badge each render so it stays in sync with any in-memory changes
-  const navItems = NAV_ITEMS.map((item) =>
+function getNavItems() {
+  return BASE_NAV_ITEMS.map((item) =>
     item.id === 'nav-assignments'
       ? { ...item, badge: getAssignmentBadge() }
       : item
   );
+}
+
+/** Returns initials from a display name or email e.g. "Kwame Mensah" → "KM" */
+function getInitials(nameOrEmail: string): string {
+  const parts = nameOrEmail.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return nameOrEmail.slice(0, 2).toUpperCase();
+}
+
+export default function Sidebar() {
+  const [collapsed, setCollapsed] = useState(false);
+  const pathname = usePathname();
+  const navItems = getNavItems();
+
+  const [displayName, setDisplayName] = useState('IT Admin');
+  const [displayEmail, setDisplayEmail] = useState('admin@company.com');
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) return;
+      const meta = data.user.user_metadata as Record<string, string> | undefined;
+      const name =
+        meta?.full_name ||
+        meta?.name ||
+        meta?.display_name ||
+        data.user.email?.split('@')[0] ||
+        'IT Admin';
+      setDisplayName(name);
+      setDisplayEmail(data.user.email ?? 'admin@company.com');
+    });
+  }, []);
+
+  const initials = getInitials(displayName);
 
   return (
     <>
@@ -159,46 +193,58 @@ export default function Sidebar() {
             }`}
           >
             <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
-              <User size={14} className="text-white" />
+              {collapsed ? (
+                <User size={14} className="text-white" />
+              ) : (
+                <span className="text-white text-xs font-semibold leading-none select-none">
+                  {initials}
+                </span>
+              )}
             </div>
             {!collapsed && (
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-slate-800 truncate">IT Admin</p>
-                <p className="text-xs text-slate-400 truncate">admin@company.com</p>
+                <p className="text-xs font-semibold text-slate-800 truncate">{displayName}</p>
+                <p className="text-xs text-slate-400 truncate">{displayEmail}</p>
               </div>
             )}
             {!collapsed && (
-              <button className="icon-btn" title="Sign out">
-                <LogOut size={14} />
-              </button>
+              <form action={signOut}>
+                <button type="submit" className="icon-btn" title="Sign out">
+                  <LogOut size={14} />
+                </button>
+              </form>
             )}
           </div>
 
           {/* Collapse Toggle */}
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className={`w-full flex items-center justify-center py-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all duration-150`}
+            className="w-full flex items-center justify-center py-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all duration-150"
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
           </button>
         </div>
       </aside>
+
       {/* Mobile Top Bar */}
-      <MobileTopBar />
+      <MobileTopBar displayName={displayName} displayEmail={displayEmail} initials={initials} />
     </>
   );
 }
 
-function MobileTopBar() {
+function MobileTopBar({
+  displayName,
+  displayEmail,
+  initials,
+}: {
+  displayName: string;
+  displayEmail: string;
+  initials: string;
+}) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-
-  const navItems = NAV_ITEMS.map((item) =>
-    item.id === 'nav-assignments'
-      ? { ...item, badge: getAssignmentBadge() }
-      : item
-  );
+  const navItems = getNavItems();
 
   return (
     <>
@@ -221,13 +267,11 @@ function MobileTopBar() {
           </button>
         </div>
       </div>
+
       {/* Mobile Drawer */}
       {open && (
         <div className="lg:hidden fixed inset-0 z-50 flex">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setOpen(false)}
-          />
+          <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
           <div className="relative w-64 bg-white h-full flex flex-col shadow-xl">
             <div className="flex items-center justify-between h-14 px-4 border-b border-slate-100">
               <div className="flex items-center gap-2">
@@ -241,6 +285,7 @@ function MobileTopBar() {
                 </svg>
               </button>
             </div>
+
             <nav className="flex-1 px-3 py-4 space-y-1">
               {navItems?.map((item) => {
                 const Icon = item?.icon;
@@ -264,9 +309,28 @@ function MobileTopBar() {
                 );
               })}
             </nav>
+
+            {/* Mobile user row */}
+            <div className="px-4 py-4 border-t border-slate-100 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
+                <span className="text-white text-xs font-semibold leading-none select-none">
+                  {initials}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-slate-800 truncate">{displayName}</p>
+                <p className="text-xs text-slate-400 truncate">{displayEmail}</p>
+              </div>
+              <form action={signOut}>
+                <button type="submit" className="icon-btn" title="Sign out">
+                  <LogOut size={14} />
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}
+
       {/* Mobile spacer */}
       <div className="lg:hidden h-14 flex-shrink-0" />
     </>
