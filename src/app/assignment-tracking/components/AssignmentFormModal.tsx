@@ -11,7 +11,7 @@ type FormData = Omit<Assignment, 'id' | 'status' | 'returnedDate'>;
 interface AssignmentFormModalProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: Omit<Assignment, 'id'>) => void;
+  onSubmit: (data: Omit<Assignment, 'id'>) => Promise<void>;
 }
 
 const CATEGORIES: AssetCategory[] = [
@@ -31,21 +31,27 @@ const DEPARTMENTS = [
   'Operations',
 ];
 
+// Accepts EMP-0000 or DEPT-XXXX formats
+const STAFF_ID_PATTERN = /^(EMP-\d{4}|DEPT-[A-Z]+)$/;
+
 export default function AssignmentFormModal({
   open,
   onClose,
   onSubmit,
 }: AssignmentFormModalProps) {
+  const today = new Date().toISOString().split('T')[0];
+
   const {
     register,
     handleSubmit,
     reset,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     defaultValues: {
       category: 'Laptop',
       department: 'Engineering',
-      dateAssigned: new Date('2026-04-01').toISOString().split('T')[0],
+      dateAssigned: today,
     },
   });
 
@@ -54,15 +60,20 @@ export default function AssignmentFormModal({
       reset({
         category: 'Laptop',
         department: 'Engineering',
-        dateAssigned: new Date('2026-04-01').toISOString().split('T')[0],
+        dateAssigned: today,
       });
     }
-  }, [open, reset]);
+  }, [open, reset, today]);
 
   const onFormSubmit = async (data: FormData) => {
-    await new Promise((r) => setTimeout(r, 400));
-    // TODO: POST /api/assignments
-    onSubmit({ ...data, status: 'Active' });
+    try {
+      await onSubmit({ ...data, status: 'Active' });
+    } catch (err: unknown) {
+      // Surface API errors back into the form
+      const message =
+        err instanceof Error ? err.message : 'Failed to create assignment. Please try again.';
+      setError('root', { message });
+    }
   };
 
   return (
@@ -132,7 +143,10 @@ export default function AssignmentFormModal({
                 Staff Name <span className="text-red-500">*</span>
               </label>
               <input
-                {...register('staffName', { required: 'Staff name is required', minLength: { value: 2, message: 'Name too short' } })}
+                {...register('staffName', {
+                  required: 'Staff name is required',
+                  minLength: { value: 2, message: 'Name too short' },
+                })}
                 placeholder="e.g. Priya Nair"
                 className="form-input"
               />
@@ -142,13 +156,18 @@ export default function AssignmentFormModal({
               <label className="form-label">
                 Staff ID <span className="text-red-500">*</span>
               </label>
-              <p className="form-helper -mt-0.5 mb-1">Employee ID from HR system</p>
+              <p className="form-helper -mt-0.5 mb-1">
+                Employee ID (EMP-0000) or Department ID (DEPT-INFRA)
+              </p>
               <input
                 {...register('staffId', {
                   required: 'Staff ID is required',
-                  pattern: { value: /^EMP-\d{4}$/, message: 'Format must be EMP-0000' },
+                  pattern: {
+                    value: STAFF_ID_PATTERN,
+                    message: 'Use format EMP-0000 or DEPT-NAME',
+                  },
                 })}
-                placeholder="EMP-1042"
+                placeholder="EMP-1042 or DEPT-INFRA"
                 className="form-input font-mono"
               />
               {errors.staffId && <p className="form-error">{errors.staffId.message}</p>}
@@ -197,7 +216,9 @@ export default function AssignmentFormModal({
                 {...register('expectedReturn', { required: 'Expected return date is required' })}
                 className="form-input"
               />
-              {errors.expectedReturn && <p className="form-error">{errors.expectedReturn.message}</p>}
+              {errors.expectedReturn && (
+                <p className="form-error">{errors.expectedReturn.message}</p>
+              )}
             </div>
           </div>
         </div>
@@ -217,6 +238,13 @@ export default function AssignmentFormModal({
             className="form-input resize-none"
           />
         </div>
+
+        {/* Root/API error */}
+        {errors.root && (
+          <div className="px-3 py-2.5 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-xs text-red-700">{errors.root.message}</p>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">

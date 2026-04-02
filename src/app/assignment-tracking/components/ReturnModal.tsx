@@ -14,17 +14,40 @@ interface ReturnModalProps {
 }
 
 export default function ReturnModal({ open, onClose, assignment, onConfirm }: ReturnModalProps) {
-  const [returnDate, setReturnDate] = useState('2026-04-01');
+  const [returnDate, setReturnDate] = useState(new Date().toISOString().split('T')[0]);
   const [condition, setCondition] = useState<'Good' | 'Damaged' | 'Needs Service'>('Good');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   async function handleConfirm() {
+    if (!returnDate) return;
     setLoading(true);
-    // TODO: PATCH /api/assignments/:id/return
-    await new Promise((r) => setTimeout(r, 500));
-    onConfirm(assignment.id, returnDate);
-    setLoading(false);
+    setError('');
+
+    try {
+      const res = await fetch(`/api/assignments/${assignment.id}/return`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          returnedDate: returnDate,
+          condition,
+          notes: notes.trim() || undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? 'Failed to process return. Please try again.');
+        return;
+      }
+
+      onConfirm(assignment.id, returnDate);
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -55,7 +78,10 @@ export default function ReturnModal({ open, onClose, assignment, onConfirm }: Re
               {' '}({assignment.staffId}) — {assignment.department}
             </p>
             <p className="text-xs text-slate-400 mt-0.5">
-              Originally assigned: {new Date(assignment.dateAssigned).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              Originally assigned:{' '}
+              {new Date(assignment.dateAssigned).toLocaleDateString('en-US', {
+                month: 'short', day: 'numeric', year: 'numeric',
+              })}
             </p>
           </div>
         </div>
@@ -70,6 +96,7 @@ export default function ReturnModal({ open, onClose, assignment, onConfirm }: Re
             type="date"
             value={returnDate}
             onChange={(e) => setReturnDate(e.target.value)}
+            max={new Date().toISOString().split('T')[0]}
             className="form-input"
           />
         </div>
@@ -85,8 +112,12 @@ export default function ReturnModal({ open, onClose, assignment, onConfirm }: Re
                 onClick={() => setCondition(c)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-150 ${
                   condition === c
-                    ? c === 'Good' ?'bg-emerald-600 text-white border-emerald-600'
-                      : c === 'Damaged' ?'bg-red-600 text-white border-red-600' :'bg-amber-500 text-white border-amber-500' :'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                    ? c === 'Good'
+                      ? 'bg-emerald-600 text-white border-emerald-600'
+                      : c === 'Damaged'
+                      ? 'bg-red-600 text-white border-red-600'
+                      : 'bg-amber-500 text-white border-amber-500'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
                 }`}
               >
                 {c}
@@ -106,6 +137,13 @@ export default function ReturnModal({ open, onClose, assignment, onConfirm }: Re
             className="form-input resize-none"
           />
         </div>
+
+        {/* Error */}
+        {error && (
+          <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-xs text-red-700">{error}</p>
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">

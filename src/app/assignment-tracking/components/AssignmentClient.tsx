@@ -9,8 +9,8 @@ import AssignmentTable from './AssignmentTable';
 import AssignmentFormModal from './AssignmentFormModal';
 import ReturnModal from './ReturnModal';
 
-const DEPARTMENTS = ['All','Engineering','Design','Finance','Administration','IT Infrastructure','Sales'];
-const STATUSES = ['All','Active','Overdue','Returned'];
+const DEPARTMENTS = ['All', 'Engineering', 'Design', 'Finance', 'Administration', 'IT Infrastructure', 'Sales'];
+const STATUSES = ['All', 'Active', 'Overdue', 'Returned'];
 
 function dbRowToAssignment(row: Record<string, unknown>): Assignment {
   return {
@@ -80,13 +80,20 @@ export default function AssignmentClient() {
     returned: assignments.filter((a) => a.status === 'Returned').length,
   }), [assignments]);
 
+  // Returns a promise so AssignmentFormModal can catch and surface API errors
   async function handleNewAssignment(data: Omit<Assignment, 'id'>) {
     const res = await fetch('/api/assignments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) { toast.error('Failed to create assignment'); return; }
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      // Throw so the modal can catch and display the error inline
+      throw new Error(err.error ?? 'Failed to create assignment');
+    }
+
     const row = await res.json();
     setAssignments((prev) => [dbRowToAssignment(row), ...prev]);
     setAssignModalOpen(false);
@@ -94,12 +101,8 @@ export default function AssignmentClient() {
   }
 
   async function handleReturn(id: string, returnedDate: string) {
-    const res = await fetch(`/api/assignments/${id}/return`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ returnedDate }),
-    });
-    if (!res.ok) { toast.error('Failed to process return'); return; }
+    // The actual API call is now done inside ReturnModal itself.
+    // This callback just updates local state on success.
     setAssignments((prev) =>
       prev.map((a) => a.id === id ? { ...a, status: 'Returned' as const, returnedDate } : a)
     );
@@ -172,7 +175,9 @@ export default function AssignmentClient() {
           <div className="flex items-center gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg">
             <Clock size={15} className="text-amber-600 flex-shrink-0" />
             <p className="text-sm text-amber-800">
-              <span className="font-semibold">{stats.overdue} assignment{stats.overdue > 1 ? 's are' : ' is'} overdue.</span>{' '}
+              <span className="font-semibold">
+                {stats.overdue} assignment{stats.overdue > 1 ? 's are' : ' is'} overdue.
+              </span>{' '}
               Contact the assigned staff members to arrange equipment return.
             </p>
           </div>
@@ -228,7 +233,11 @@ export default function AssignmentClient() {
         )}
       </div>
 
-      <AssignmentFormModal open={assignModalOpen} onClose={() => setAssignModalOpen(false)} onSubmit={handleNewAssignment} />
+      <AssignmentFormModal
+        open={assignModalOpen}
+        onClose={() => setAssignModalOpen(false)}
+        onSubmit={handleNewAssignment}
+      />
       {returnAssignment && (
         <ReturnModal
           open={!!returnAssignment}

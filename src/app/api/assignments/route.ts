@@ -37,12 +37,58 @@ export async function POST(request: NextRequest) {
   // Find asset UUID from tag
   const { data: asset, error: assetErr } = await supabase
     .from('assets')
-    .select('id, name')
+    .select('id, name, status')
     .eq('asset_tag', body.assetTag)
     .single();
 
   if (assetErr || !asset) {
     return NextResponse.json({ error: `Asset ${body.assetTag} not found` }, { status: 404 });
+  }
+
+  // Guard: prevent assigning an asset that is already actively assigned
+  if (asset.status === 'Assigned') {
+    // Check if there's an active/overdue assignment for this asset
+    const { data: activeAssignment } = await supabase
+      .from('assignments')
+      .select('id, staff_name, staff_id')
+      .eq('asset_tag', body.assetTag)
+      .in('status', ['Active', 'Overdue'])
+      .limit(1)
+      .maybeSingle();
+
+    if (activeAssignment) {
+      return NextResponse.json(
+        {
+          error: `Asset ${body.assetTag} is already assigned to ${activeAssignment.staff_name} (${activeAssignment.staff_id}). Please process a return before reassigning.`,
+        },
+        { status: 409 }
+      );
+    }
+  }
+
+  // Guard: prevent assigning a faulty or retired asset
+  if (asset.status === 'Faulty') {
+    return NextResponse.json(
+      { error: `Asset ${body.assetTag} is marked as Faulty and cannot be assigned.` },
+      { status: 409 }
+    );
+  }
+
+  if (asset.status === 'Retired') {
+    return NextResponse.json(
+      { error: `Asset ${body.assetTag} is Retired and cannot be assigned.` },
+      { status: 409 }
+    );
+  }
+
+  // Validate dates
+  if (body.expectedReturn && body.dateAssigned) {
+    if (new Date(body.expectedReturn) <= new Date(body.dateAssigned)) {
+      return NextResponse.json(
+        { error: 'Expected return date must be after the assignment date.' },
+        { status: 400 }
+      );
+    }
   }
 
   const { data, error } = await supabase
@@ -77,11 +123,11 @@ export async function POST(request: NextRequest) {
     .eq('id', asset.id);
 
   await supabase.from('audit_logs').insert({
-    action:      'Assigned',
-    asset_tag:   body.assetTag,
-    asset_name:  body.assetName,
+    action:       'Assigned',
+    asset_tag:    body.assetTag,
+    asset_name:   body.assetName,
     performed_by: user.email ?? 'Admin (IT)',
-    details:     `Assigned to ${body.staffName} (${body.staffId}) — ${body.department}`,
+    details:      `Assigned to ${body.staffName} (${body.staffId}) — ${body.department}`,
   });
 
   return NextResponse.json(data, { status: 201 });
