@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import AppLayout from '@/components/AppLayout';
-import { Asset, AssetCategory, AssetStatus } from '@/lib/mockData';
+import { Asset, AssetCategory, AssetStatus, SchoolSection, SCHOOLS } from '@/lib/mockData';
 import { ArrowLeft, Plus, Loader2, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -16,9 +16,15 @@ const CATEGORIES: AssetCategory[] = [
 ];
 const STATUSES: AssetStatus[] = ['Available', 'Assigned', 'Faulty', 'Retired'];
 
+const SCHOOL_COLORS: Record<SchoolSection, string> = {
+  'Infant School':    'peer-checked:bg-pink-600 peer-checked:border-pink-600 peer-checked:text-white',
+  'Junior School':    'peer-checked:bg-violet-600 peer-checked:border-violet-600 peer-checked:text-white',
+  'Secondary School': 'peer-checked:bg-teal-600 peer-checked:border-teal-600 peer-checked:text-white',
+};
+
 export default function AddDevicePage() {
   const [submitted, setSubmitted] = useState(false);
-  const [addedTag, setAddedTag]   = useState('');
+  const [addedTag, setAddedTag] = useState('');
 
   const {
     register,
@@ -101,6 +107,7 @@ export default function AddDevicePage() {
           </div>
         ) : (
           <form onSubmit={handleSubmit(onFormSubmit)} className="card p-6 space-y-6">
+
             {/* Asset Identification */}
             <div>
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
@@ -188,12 +195,43 @@ export default function AddDevicePage() {
                   <p className="form-helper -mt-0.5 mb-1">Building, floor, or room</p>
                   <input
                     {...register('location', { required: 'Location is required' })}
-                    placeholder="e.g. Floor 3 — Engineering"
+                    placeholder="e.g. Block A — Room 12"
                     className="form-input"
                   />
                   {errors.location && <p className="form-error">{errors.location.message}</p>}
                 </div>
               </div>
+            </div>
+
+            <hr className="border-slate-100" />
+
+            {/* School Section */}
+            <div>
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+                School Section
+              </h3>
+              <label className="form-label">School <span className="text-red-500">*</span></label>
+              <p className="form-helper -mt-0.5 mb-2">Which school section does this asset belong to?</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                {SCHOOLS.map((school) => (
+                  <label key={school} className="relative cursor-pointer">
+                    <input
+                      type="radio"
+                      value={school}
+                      {...register('school', { required: 'Please select a school section' })}
+                      className="peer sr-only"
+                    />
+                    <span
+                      className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-150
+                        border-slate-200 text-slate-600 bg-white hover:border-slate-300
+                        ${SCHOOL_COLORS[school]}`}
+                    >
+                      {school}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {errors.school && <p className="form-error mt-1">{errors.school.message}</p>}
             </div>
 
             <hr className="border-slate-100" />
@@ -217,7 +255,7 @@ export default function AddDevicePage() {
                 </div>
                 <div>
                   <label className="form-label">Department</label>
-                  <input {...register('department')} placeholder="e.g. Engineering" className="form-input" />
+                  <input {...register('department')} placeholder="e.g. Year 3" className="form-input" />
                 </div>
               </div>
             </div>

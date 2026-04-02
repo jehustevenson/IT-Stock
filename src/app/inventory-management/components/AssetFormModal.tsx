@@ -3,7 +3,7 @@
 import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import Modal from '@/components/ui/Modal';
-import { Asset, AssetCategory, AssetStatus } from '@/lib/mockData';
+import { Asset, AssetCategory, AssetStatus, SchoolSection, SCHOOLS } from '@/lib/mockData';
 import { Loader2 } from 'lucide-react';
 
 type FormData = Omit<Asset, 'id'>;
@@ -32,20 +32,21 @@ export default function AssetFormModal({
   } = useForm<FormData>({
     defaultValues: defaultValues
       ? {
-          assetTag: defaultValues.assetTag,
-          name: defaultValues.name,
-          category: defaultValues.category,
+          assetTag:     defaultValues.assetTag,
+          name:         defaultValues.name,
+          category:     defaultValues.category,
           serialNumber: defaultValues.serialNumber,
           purchaseDate: defaultValues.purchaseDate,
-          status: defaultValues.status,
-          location: defaultValues.location,
-          assignedTo: defaultValues.assignedTo ?? '',
+          status:       defaultValues.status,
+          location:     defaultValues.location,
+          school:       defaultValues.school ?? undefined,
+          assignedTo:   defaultValues.assignedTo   ?? '',
           assignedToId: defaultValues.assignedToId ?? '',
-          department: defaultValues.department ?? '',
-          notes: defaultValues.notes ?? '',
+          department:   defaultValues.department   ?? '',
+          notes:        defaultValues.notes        ?? '',
         }
       : {
-          status: 'Available',
+          status:   'Available',
           category: 'Laptop',
         },
   });
@@ -55,17 +56,18 @@ export default function AssetFormModal({
       reset(
         defaultValues
           ? {
-              assetTag: defaultValues.assetTag,
-              name: defaultValues.name,
-              category: defaultValues.category,
+              assetTag:     defaultValues.assetTag,
+              name:         defaultValues.name,
+              category:     defaultValues.category,
               serialNumber: defaultValues.serialNumber,
               purchaseDate: defaultValues.purchaseDate,
-              status: defaultValues.status,
-              location: defaultValues.location,
-              assignedTo: defaultValues.assignedTo ?? '',
+              status:       defaultValues.status,
+              location:     defaultValues.location,
+              school:       defaultValues.school ?? undefined,
+              assignedTo:   defaultValues.assignedTo   ?? '',
               assignedToId: defaultValues.assignedToId ?? '',
-              department: defaultValues.department ?? '',
-              notes: defaultValues.notes ?? '',
+              department:   defaultValues.department   ?? '',
+              notes:        defaultValues.notes        ?? '',
             }
           : { status: 'Available', category: 'Laptop' }
       );
@@ -73,9 +75,7 @@ export default function AssetFormModal({
   }, [open, defaultValues, reset]);
 
   const onFormSubmit = async (data: FormData) => {
-    // Simulate brief async
     await new Promise((r) => setTimeout(r, 400));
-    // TODO: POST or PUT /api/assets
     onSubmit(data);
   };
 
@@ -84,10 +84,15 @@ export default function AssetFormModal({
       open={open}
       onClose={onClose}
       title={mode === 'add' ? 'Add New Asset' : `Edit Asset — ${defaultValues?.assetTag}`}
-      subtitle={mode === 'add' ? 'Fill in all required fields to register a new IT asset.' : 'Update the details for this asset.'}
+      subtitle={
+        mode === 'add'
+          ? 'Fill in all required fields to register a new IT asset.'
+          : 'Update the details for this asset.'
+      }
       size="lg"
     >
       <form onSubmit={handleSubmit(onFormSubmit)} className="px-6 py-5 space-y-5">
+
         {/* Section: Identification */}
         <div>
           <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
@@ -98,9 +103,7 @@ export default function AssetFormModal({
               <label className="form-label">
                 Asset Tag / Unique ID <span className="text-red-500">*</span>
               </label>
-              <p className="form-helper -mt-0.5 mb-1">
-                Format: IT-[TYPE]-[NUMBER] e.g. IT-LT-0045
-              </p>
+              <p className="form-helper -mt-0.5 mb-1">Format: IT-[TYPE]-[NUMBER] e.g. IT-LT-0045</p>
               <input
                 {...register('assetTag', {
                   required: 'Asset tag is required',
@@ -138,7 +141,10 @@ export default function AssetFormModal({
                 Item Name <span className="text-red-500">*</span>
               </label>
               <input
-                {...register('name', { required: 'Item name is required', minLength: { value: 3, message: 'Name must be at least 3 characters' } })}
+                {...register('name', {
+                  required: 'Item name is required',
+                  minLength: { value: 3, message: 'Name must be at least 3 characters' },
+                })}
                 placeholder="e.g. Dell Latitude 5540"
                 className="form-input"
               />
@@ -182,11 +188,54 @@ export default function AssetFormModal({
               <p className="form-helper -mt-0.5 mb-1">Building, floor, or room</p>
               <input
                 {...register('location', { required: 'Location is required' })}
-                placeholder="e.g. Floor 3 — Engineering"
+                placeholder="e.g. Block A — Room 12"
                 className="form-input"
               />
               {errors.location && <p className="form-error">{errors.location.message}</p>}
             </div>
+          </div>
+        </div>
+
+        <hr className="border-slate-100" />
+
+        {/* Section: School */}
+        <div>
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+            School Section
+          </h3>
+          <div>
+            <label className="form-label">School <span className="text-red-500">*</span></label>
+            <p className="form-helper -mt-0.5 mb-1">Which school section does this asset belong to?</p>
+            <div className="flex items-center gap-2 flex-wrap mt-1">
+              {SCHOOLS.map((school) => {
+                const colorMap: Record<SchoolSection, string> = {
+                  'Infant School':    'peer-checked:bg-pink-600 peer-checked:border-pink-600 peer-checked:text-white',
+                  'Junior School':    'peer-checked:bg-violet-600 peer-checked:border-violet-600 peer-checked:text-white',
+                  'Secondary School': 'peer-checked:bg-teal-600 peer-checked:border-teal-600 peer-checked:text-white',
+                };
+                return (
+                  <label
+                    key={school}
+                    className="relative cursor-pointer"
+                  >
+                    <input
+                      type="radio"
+                      value={school}
+                      {...register('school', { required: 'Please select a school section' })}
+                      className="peer sr-only"
+                    />
+                    <span
+                      className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-150
+                        border-slate-200 text-slate-600 bg-white hover:border-slate-300
+                        ${colorMap[school]}`}
+                    >
+                      {school}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            {errors.school && <p className="form-error mt-1">{errors.school.message}</p>}
           </div>
         </div>
 
@@ -203,27 +252,15 @@ export default function AssetFormModal({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="form-label">Staff Name</label>
-              <input
-                {...register('assignedTo')}
-                placeholder="e.g. Marcus Osei"
-                className="form-input"
-              />
+              <input {...register('assignedTo')} placeholder="e.g. Marcus Osei" className="form-input" />
             </div>
             <div>
               <label className="form-label">Staff ID</label>
-              <input
-                {...register('assignedToId')}
-                placeholder="e.g. EMP-1042"
-                className="form-input font-mono"
-              />
+              <input {...register('assignedToId')} placeholder="e.g. EMP-1042" className="form-input font-mono" />
             </div>
             <div>
               <label className="form-label">Department</label>
-              <input
-                {...register('department')}
-                placeholder="e.g. Engineering"
-                className="form-input"
-              />
+              <input {...register('department')} placeholder="e.g. Engineering" className="form-input" />
             </div>
           </div>
         </div>

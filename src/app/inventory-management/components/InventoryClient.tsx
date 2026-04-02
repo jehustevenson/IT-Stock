@@ -3,8 +3,9 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { Toaster } from 'sonner';
-import { Plus, Search, Filter, Download, RefreshCw } from 'lucide-react';
-import type { Asset, AssetStatus, AssetCategory } from '@/lib/mockData';
+import { Plus, Search, Filter, Download, RefreshCw, School } from 'lucide-react';
+import type { Asset, AssetStatus, AssetCategory, SchoolSection } from '@/lib/mockData';
+import { SCHOOLS } from '@/lib/mockData';
 import AssetTable from './AssetTable';
 import AssetFormModal from './AssetFormModal';
 import QRCodeModal from './QRCodeModal';
@@ -14,6 +15,12 @@ const CATEGORIES: AssetCategory[] = [
   'Laptop', 'Desktop', 'Monitor', 'Printer', 'Networking', 'Accessory', 'Server', 'Phone',
 ];
 const STATUSES: AssetStatus[] = ['Available', 'Assigned', 'Faulty', 'Retired'];
+
+const SCHOOL_COLORS: Record<SchoolSection, { active: string; dot: string }> = {
+  'Infant School':    { active: 'bg-pink-600 text-white border-pink-600',    dot: 'bg-pink-500'   },
+  'Junior School':    { active: 'bg-violet-600 text-white border-violet-600', dot: 'bg-violet-500' },
+  'Secondary School': { active: 'bg-teal-600 text-white border-teal-600',    dot: 'bg-teal-500'   },
+};
 
 function dbRowToAsset(row: Record<string, unknown>): Asset {
   return {
@@ -25,10 +32,11 @@ function dbRowToAsset(row: Record<string, unknown>): Asset {
     purchaseDate:  row.purchase_date as string,
     status:        row.status as AssetStatus,
     location:      row.location as string,
-    assignedTo:    (row.assigned_to as string) ?? undefined,
+    school:        (row.school as SchoolSection) ?? undefined,
+    assignedTo:    (row.assigned_to as string)    ?? undefined,
     assignedToId:  (row.assigned_to_id as string) ?? undefined,
-    department:    (row.department as string) ?? undefined,
-    notes:         (row.notes as string) ?? undefined,
+    department:    (row.department as string)      ?? undefined,
+    notes:         (row.notes as string)           ?? undefined,
   };
 }
 
@@ -36,6 +44,7 @@ export default function InventoryClient() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [filterSchool, setFilterSchool] = useState<SchoolSection | 'All'>('All');
   const [filterCategory, setFilterCategory] = useState<string>('All');
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [sortKey, setSortKey] = useState<keyof Asset>('assetTag');
@@ -56,7 +65,7 @@ export default function InventoryClient() {
       if (!res.ok) throw new Error('Failed to load assets');
       const rows = await res.json();
       setAssets(rows.map(dbRowToAsset));
-    } catch (err) {
+    } catch {
       toast.error('Could not load assets');
     } finally {
       setLoading(false);
@@ -67,6 +76,7 @@ export default function InventoryClient() {
 
   const filtered = useMemo(() => {
     let result = assets;
+    if (filterSchool !== 'All') result = result.filter((a) => a.school === filterSchool);
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(
@@ -79,7 +89,7 @@ export default function InventoryClient() {
       );
     }
     if (filterCategory !== 'All') result = result.filter((a) => a.category === filterCategory);
-    if (filterStatus !== 'All') result = result.filter((a) => a.status === filterStatus);
+    if (filterStatus !== 'All')   result = result.filter((a) => a.status === filterStatus);
 
     result = [...result].sort((a, b) => {
       const av = (a[sortKey] ?? '') as string;
@@ -88,7 +98,7 @@ export default function InventoryClient() {
     });
 
     return result;
-  }, [assets, search, filterCategory, filterStatus, sortKey, sortDir]);
+  }, [assets, search, filterSchool, filterCategory, filterStatus, sortKey, sortDir]);
 
   function handleSort(key: keyof Asset) {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -156,9 +166,9 @@ export default function InventoryClient() {
   }
 
   async function handleExportCSV() {
-    const headers = ['Asset Tag','Name','Category','Serial Number','Status','Location','Purchase Date','Assigned To','Department'];
+    const headers = ['Asset Tag', 'Name', 'Category', 'School', 'Serial Number', 'Status', 'Location', 'Purchase Date', 'Assigned To', 'Department'];
     const rows = filtered.map((a) => [
-      a.assetTag, a.name, a.category, a.serialNumber, a.status,
+      a.assetTag, a.name, a.category, a.school ?? '', a.serialNumber, a.status,
       a.location, a.purchaseDate, a.assignedTo ?? '', a.department ?? '',
     ]);
     const csv = [headers, ...rows].map((r) => r.map((v) => `"${v}"`).join(',')).join('\n');
@@ -169,11 +179,22 @@ export default function InventoryClient() {
     URL.revokeObjectURL(url);
   }
 
-  const categoryStats = useMemo(() => {
+  // Stats per school for the chips
+  const schoolStats = useMemo(() => {
     const counts: Record<string, number> = { All: assets.length };
-    for (const a of assets) counts[a.category] = (counts[a.category] ?? 0) + 1;
+    for (const a of assets) {
+      if (a.school) counts[a.school] = (counts[a.school] ?? 0) + 1;
+    }
     return counts;
   }, [assets]);
+
+  // Category stats scoped to selected school
+  const categoryStats = useMemo(() => {
+    const scoped = filterSchool === 'All' ? assets : assets.filter((a) => a.school === filterSchool);
+    const counts: Record<string, number> = { All: scoped.length };
+    for (const a of scoped) counts[a.category] = (counts[a.category] ?? 0) + 1;
+    return counts;
+  }, [assets, filterSchool]);
 
   return (
     <>
@@ -183,7 +204,7 @@ export default function InventoryClient() {
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Inventory Management</h1>
             <p className="text-sm text-slate-500 mt-1">
-              {assets.length} assets tracked across all categories
+              {assets.length} assets tracked across all schools
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -199,6 +220,50 @@ export default function InventoryClient() {
               <Plus size={14} />
               Add Asset
             </button>
+          </div>
+        </div>
+
+        {/* School filter chips */}
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <School size={13} className="text-slate-400" />
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">School Section</span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => { setFilterSchool('All'); setFilterCategory('All'); }}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-150 ${
+                filterSchool === 'All'
+                  ? 'bg-slate-800 text-white border-slate-800'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              All Schools
+              <span className={filterSchool === 'All' ? 'text-slate-300' : 'text-slate-400'}>
+                {schoolStats['All'] ?? 0}
+              </span>
+            </button>
+            {SCHOOLS.map((school) => {
+              const colors = SCHOOL_COLORS[school];
+              const isActive = filterSchool === school;
+              return (
+                <button
+                  key={school}
+                  onClick={() => { setFilterSchool(school); setFilterCategory('All'); }}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-150 ${
+                    isActive
+                      ? colors.active
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white/70' : colors.dot}`} />
+                  {school}
+                  <span className={isActive ? 'opacity-70' : 'text-slate-400'}>
+                    {schoolStats[school] ?? 0}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 

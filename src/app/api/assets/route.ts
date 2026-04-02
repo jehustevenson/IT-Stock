@@ -7,12 +7,14 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const category = searchParams.get('category');
   const status   = searchParams.get('status');
+  const school   = searchParams.get('school');
   const search   = searchParams.get('search');
 
   let query = supabase.from('assets').select('*').order('asset_tag', { ascending: true });
 
   if (category) query = query.eq('category', category);
   if (status)   query = query.eq('status', status);
+  if (school)   query = query.eq('school', school);
   if (search) {
     query = query.or(
       `name.ilike.%${search}%,asset_tag.ilike.%${search}%,serial_number.ilike.%${search}%,location.ilike.%${search}%,assigned_to.ilike.%${search}%`
@@ -42,6 +44,7 @@ export async function POST(request: NextRequest) {
       purchase_date:  body.purchaseDate,
       status:         body.status ?? 'Available',
       location:       body.location,
+      school:         body.school ?? null,
       assigned_to:    body.assignedTo    ?? null,
       assigned_to_id: body.assignedToId  ?? null,
       department:     body.department    ?? null,
@@ -52,13 +55,12 @@ export async function POST(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Write audit log
   await supabase.from('audit_logs').insert({
-    action:      'Added',
-    asset_tag:   data.asset_tag,
-    asset_name:  data.name,
+    action:       'Added',
+    asset_tag:    data.asset_tag,
+    asset_name:   data.name,
     performed_by: user.email ?? 'Admin (IT)',
-    details:     `New asset added to inventory — ${data.location}`,
+    details:      `New asset added to inventory — ${data.school ? data.school + ', ' : ''}${data.location}`,
   });
 
   return NextResponse.json(data, { status: 201 });

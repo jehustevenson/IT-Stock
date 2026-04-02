@@ -35,6 +35,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
       purchase_date:  body.purchaseDate,
       status:         body.status,
       location:       body.location,
+      school:         body.school ?? null,
       assigned_to:    body.assignedTo    ?? null,
       assigned_to_id: body.assignedToId  ?? null,
       department:     body.department    ?? null,
@@ -47,11 +48,11 @@ export async function PUT(request: NextRequest, { params }: Params) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   await supabase.from('audit_logs').insert({
-    action:      'Updated',
-    asset_tag:   data.asset_tag,
-    asset_name:  data.name,
+    action:       'Updated',
+    asset_tag:    data.asset_tag,
+    asset_name:   data.name,
     performed_by: user.email ?? 'Admin (IT)',
-    details:     `Asset details updated`,
+    details:      `Asset details updated`,
   });
 
   return NextResponse.json(data);
@@ -75,11 +76,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   await supabase.from('audit_logs').insert({
-    action:      body.status === 'Faulty' ? 'Flagged' : 'Updated',
-    asset_tag:   data.asset_tag,
-    asset_name:  data.name,
+    action:       body.status === 'Faulty' ? 'Flagged' : 'Updated',
+    asset_tag:    data.asset_tag,
+    asset_name:   data.name,
     performed_by: user.email ?? 'Admin (IT)',
-    details:     `Status changed to ${body.status}`,
+    details:      `Status changed to ${body.status}`,
   });
 
   return NextResponse.json(data);
@@ -92,7 +93,6 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // Fetch before deleting so we can log it
   const { data: asset } = await supabase
     .from('assets')
     .select('asset_tag, name')
@@ -104,11 +104,11 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
 
   if (asset) {
     await supabase.from('audit_logs').insert({
-      action:      'Deleted',
-      asset_tag:   asset.asset_tag,
-      asset_name:  asset.name,
+      action:       'Deleted',
+      asset_tag:    asset.asset_tag,
+      asset_name:   asset.name,
       performed_by: user.email ?? 'Admin (IT)',
-      details:     `Asset permanently removed from inventory`,
+      details:      `Asset permanently removed from inventory`,
     });
   }
 
