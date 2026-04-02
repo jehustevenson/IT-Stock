@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
 import AppLayout from '@/components/AppLayout';
 import { Asset, AssetCategory, AssetStatus, SchoolSection, SCHOOLS } from '@/lib/mockData';
-import { ArrowLeft, Plus, Loader2, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Plus, Loader2, CheckCircle2, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { Toaster } from 'sonner';
@@ -15,6 +15,30 @@ const CATEGORIES: AssetCategory[] = [
   'Laptop', 'Desktop', 'Monitor', 'Printer', 'Networking', 'Accessory', 'Server', 'Phone',
 ];
 const STATUSES: AssetStatus[] = ['Available', 'Assigned', 'Faulty', 'Retired'];
+
+const SCHOOL_PREFIX: Record<SchoolSection, string> = {
+  'Infant School':    'INF',
+  'Junior School':    'JUN',
+  'Secondary School': 'SEC',
+};
+
+const CATEGORY_CODE: Record<AssetCategory, string> = {
+  Laptop:     'LT',
+  Desktop:    'DT',
+  Monitor:    'MN',
+  Printer:    'PR',
+  Networking: 'NW',
+  Accessory:  'AC',
+  Server:     'SV',
+  Phone:      'PH',
+};
+
+function generateTag(school: SchoolSection, category: AssetCategory): string {
+  const prefix = SCHOOL_PREFIX[school];
+  const code = CATEGORY_CODE[category];
+  const num = String(Math.floor(1000 + Math.random() * 9000));
+  return `${prefix}-${code}-${num}`;
+}
 
 const SCHOOL_COLORS: Record<SchoolSection, string> = {
   'Infant School':    'peer-checked:bg-pink-600 peer-checked:border-pink-600 peer-checked:text-white',
@@ -30,6 +54,8 @@ export default function AddDevicePage() {
     register,
     handleSubmit,
     reset,
+    setValue,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     defaultValues: {
@@ -37,6 +63,21 @@ export default function AddDevicePage() {
       category: 'Laptop',
     },
   });
+
+  const watchedSchool   = useWatch({ control, name: 'school' });
+  const watchedCategory = useWatch({ control, name: 'category' });
+
+  const regenerateTag = useCallback(() => {
+    if (watchedSchool && watchedCategory) {
+      setValue('assetTag', generateTag(watchedSchool as SchoolSection, watchedCategory as AssetCategory), { shouldValidate: true });
+    }
+  }, [watchedSchool, watchedCategory, setValue]);
+
+  useEffect(() => {
+    if (watchedSchool && watchedCategory) {
+      setValue('assetTag', generateTag(watchedSchool as SchoolSection, watchedCategory as AssetCategory), { shouldValidate: true });
+    }
+  }, [watchedSchool, watchedCategory, setValue]);
 
   const onFormSubmit = async (data: FormData) => {
     const res = await fetch('/api/assets', {
@@ -66,7 +107,8 @@ export default function AddDevicePage() {
     <AppLayout>
       <Toaster position="bottom-right" richColors />
       <div className="px-6 lg:px-8 xl:px-10 py-6 max-w-3xl mx-auto space-y-6">
-        {/* Page Header */}
+
+        {/* Header */}
         <div className="flex items-center gap-3">
           <Link href="/inventory-management">
             <span className="icon-btn" title="Back to Inventory">
@@ -108,43 +150,6 @@ export default function AddDevicePage() {
         ) : (
           <form onSubmit={handleSubmit(onFormSubmit)} className="card p-6 space-y-6">
 
-            {/* Asset Identification */}
-            <div>
-              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
-                Asset Identification
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="form-label">
-                    Asset Tag / Unique ID <span className="text-red-500">*</span>
-                  </label>
-                  <p className="form-helper -mt-0.5 mb-1">Format: IT-[TYPE]-[NUMBER] e.g. IT-LT-0045</p>
-                  <input
-                    {...register('assetTag', {
-                      required: 'Asset tag is required',
-                      pattern: { value: /^IT-[A-Z]{2}-\d{4}$/, message: 'Format must be IT-XX-0000' },
-                    })}
-                    placeholder="IT-LT-0045"
-                    className="form-input font-mono"
-                  />
-                  {errors.assetTag && <p className="form-error">{errors.assetTag.message}</p>}
-                </div>
-                <div>
-                  <label className="form-label">
-                    Serial Number <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    {...register('serialNumber', { required: 'Serial number is required' })}
-                    placeholder="e.g. DLAT5540-2024-0045"
-                    className="form-input font-mono"
-                  />
-                  {errors.serialNumber && <p className="form-error">{errors.serialNumber.message}</p>}
-                </div>
-              </div>
-            </div>
-
-            <hr className="border-slate-100" />
-
             {/* Device Details */}
             <div>
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
@@ -152,9 +157,7 @@ export default function AddDevicePage() {
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
-                  <label className="form-label">
-                    Item Name <span className="text-red-500">*</span>
-                  </label>
+                  <label className="form-label">Item Name <span className="text-red-500">*</span></label>
                   <input
                     {...register('name', {
                       required: 'Item name is required',
@@ -178,9 +181,7 @@ export default function AddDevicePage() {
                   </select>
                 </div>
                 <div>
-                  <label className="form-label">
-                    Purchase Date <span className="text-red-500">*</span>
-                  </label>
+                  <label className="form-label">Purchase Date <span className="text-red-500">*</span></label>
                   <input
                     type="date"
                     {...register('purchaseDate', { required: 'Purchase date is required' })}
@@ -189,9 +190,7 @@ export default function AddDevicePage() {
                   {errors.purchaseDate && <p className="form-error">{errors.purchaseDate.message}</p>}
                 </div>
                 <div>
-                  <label className="form-label">
-                    Location <span className="text-red-500">*</span>
-                  </label>
+                  <label className="form-label">Location <span className="text-red-500">*</span></label>
                   <p className="form-helper -mt-0.5 mb-1">Building, floor, or room</p>
                   <input
                     {...register('location', { required: 'Location is required' })}
@@ -232,6 +231,58 @@ export default function AddDevicePage() {
                 ))}
               </div>
               {errors.school && <p className="form-error mt-1">{errors.school.message}</p>}
+            </div>
+
+            <hr className="border-slate-100" />
+
+            {/* Asset Identification */}
+            <div>
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+                Asset Identification
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label">
+                    Asset Tag / Unique ID <span className="text-red-500">*</span>
+                  </label>
+                  <p className="form-helper -mt-0.5 mb-1">
+                    Auto-generated from school &amp; category — you can edit if needed
+                  </p>
+                  <div className="relative">
+                    <input
+                      {...register('assetTag', {
+                        required: 'Asset tag is required',
+                        pattern: {
+                          value: /^(INF|JUN|SEC)-[A-Z]{2}-\d{4}$/,
+                          message: 'Format must be INF/JUN/SEC-XX-0000',
+                        },
+                      })}
+                      placeholder="Select school & category above"
+                      className="form-input font-mono pr-9"
+                    />
+                    {watchedSchool && watchedCategory && (
+                      <button
+                        type="button"
+                        onClick={regenerateTag}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 icon-btn"
+                        title="Generate a new ID"
+                      >
+                        <RefreshCw size={13} />
+                      </button>
+                    )}
+                  </div>
+                  {errors.assetTag && <p className="form-error">{errors.assetTag.message}</p>}
+                </div>
+                <div>
+                  <label className="form-label">Serial Number <span className="text-red-500">*</span></label>
+                  <input
+                    {...register('serialNumber', { required: 'Serial number is required' })}
+                    placeholder="e.g. DLAT5540-2024-0045"
+                    className="form-input font-mono"
+                  />
+                  {errors.serialNumber && <p className="form-error">{errors.serialNumber.message}</p>}
+                </div>
+              </div>
             </div>
 
             <hr className="border-slate-100" />

@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import React, { useEffect, useCallback } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
 import Modal from '@/components/ui/Modal';
 import { Asset, AssetCategory, AssetStatus, SchoolSection, SCHOOLS } from '@/lib/mockData';
-import { Loader2 } from 'lucide-react';
+import { Loader2, RefreshCw } from 'lucide-react';
 
 type FormData = Omit<Asset, 'id'>;
 
@@ -21,6 +21,36 @@ const CATEGORIES: AssetCategory[] = [
 ];
 const STATUSES: AssetStatus[] = ['Available', 'Assigned', 'Faulty', 'Retired'];
 
+const SCHOOL_PREFIX: Record<SchoolSection, string> = {
+  'Infant School':    'INF',
+  'Junior School':    'JUN',
+  'Secondary School': 'SEC',
+};
+
+const CATEGORY_CODE: Record<AssetCategory, string> = {
+  Laptop:     'LT',
+  Desktop:    'DT',
+  Monitor:    'MN',
+  Printer:    'PR',
+  Networking: 'NW',
+  Accessory:  'AC',
+  Server:     'SV',
+  Phone:      'PH',
+};
+
+function generateTag(school: SchoolSection, category: AssetCategory): string {
+  const prefix = SCHOOL_PREFIX[school];
+  const code = CATEGORY_CODE[category];
+  const num = String(Math.floor(1000 + Math.random() * 9000));
+  return `${prefix}-${code}-${num}`;
+}
+
+const SCHOOL_COLORS: Record<SchoolSection, string> = {
+  'Infant School':    'peer-checked:bg-pink-600 peer-checked:border-pink-600 peer-checked:text-white',
+  'Junior School':    'peer-checked:bg-violet-600 peer-checked:border-violet-600 peer-checked:text-white',
+  'Secondary School': 'peer-checked:bg-teal-600 peer-checked:border-teal-600 peer-checked:text-white',
+};
+
 export default function AssetFormModal({
   open, onClose, onSubmit, mode, defaultValues,
 }: AssetFormModalProps) {
@@ -28,6 +58,8 @@ export default function AssetFormModal({
     register,
     handleSubmit,
     reset,
+    setValue,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     defaultValues: defaultValues
@@ -50,6 +82,22 @@ export default function AssetFormModal({
           category: 'Laptop',
         },
   });
+
+  const watchedSchool   = useWatch({ control, name: 'school' });
+  const watchedCategory = useWatch({ control, name: 'category' });
+
+  const regenerateTag = useCallback(() => {
+    if (watchedSchool && watchedCategory) {
+      setValue('assetTag', generateTag(watchedSchool as SchoolSection, watchedCategory as AssetCategory), { shouldValidate: true });
+    }
+  }, [watchedSchool, watchedCategory, setValue]);
+
+  // Auto-generate when school or category changes (add mode only)
+  useEffect(() => {
+    if (mode === 'add' && watchedSchool && watchedCategory) {
+      setValue('assetTag', generateTag(watchedSchool as SchoolSection, watchedCategory as AssetCategory), { shouldValidate: true });
+    }
+  }, [watchedSchool, watchedCategory, mode, setValue]);
 
   useEffect(() => {
     if (open) {
@@ -93,53 +141,14 @@ export default function AssetFormModal({
     >
       <form onSubmit={handleSubmit(onFormSubmit)} className="px-6 py-5 space-y-5">
 
-        {/* Section: Identification */}
-        <div>
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
-            Asset Identification
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="form-label">
-                Asset Tag / Unique ID <span className="text-red-500">*</span>
-              </label>
-              <p className="form-helper -mt-0.5 mb-1">Format: IT-[TYPE]-[NUMBER] e.g. IT-LT-0045</p>
-              <input
-                {...register('assetTag', {
-                  required: 'Asset tag is required',
-                  pattern: { value: /^IT-[A-Z]{2}-\d{4}$/, message: 'Format must be IT-XX-0000' },
-                })}
-                placeholder="IT-LT-0045"
-                className="form-input font-mono"
-              />
-              {errors.assetTag && <p className="form-error">{errors.assetTag.message}</p>}
-            </div>
-            <div>
-              <label className="form-label">
-                Serial Number <span className="text-red-500">*</span>
-              </label>
-              <input
-                {...register('serialNumber', { required: 'Serial number is required' })}
-                placeholder="e.g. DLAT5540-2024-0045"
-                className="form-input font-mono"
-              />
-              {errors.serialNumber && <p className="form-error">{errors.serialNumber.message}</p>}
-            </div>
-          </div>
-        </div>
-
-        <hr className="border-slate-100" />
-
-        {/* Section: Device Details */}
+        {/* Device Details — first so school+category drive the tag */}
         <div>
           <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
             Device Details
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
-              <label className="form-label">
-                Item Name <span className="text-red-500">*</span>
-              </label>
+              <label className="form-label">Item Name <span className="text-red-500">*</span></label>
               <input
                 {...register('name', {
                   required: 'Item name is required',
@@ -151,9 +160,7 @@ export default function AssetFormModal({
               {errors.name && <p className="form-error">{errors.name.message}</p>}
             </div>
             <div>
-              <label className="form-label">
-                Category <span className="text-red-500">*</span>
-              </label>
+              <label className="form-label">Category <span className="text-red-500">*</span></label>
               <select {...register('category', { required: true })} className="form-input">
                 {CATEGORIES.map((c) => (
                   <option key={`cat-opt-${c}`} value={c}>{c}</option>
@@ -161,9 +168,7 @@ export default function AssetFormModal({
               </select>
             </div>
             <div>
-              <label className="form-label">
-                Status <span className="text-red-500">*</span>
-              </label>
+              <label className="form-label">Status <span className="text-red-500">*</span></label>
               <select {...register('status', { required: true })} className="form-input">
                 {STATUSES.map((s) => (
                   <option key={`status-opt-${s}`} value={s}>{s}</option>
@@ -171,9 +176,7 @@ export default function AssetFormModal({
               </select>
             </div>
             <div>
-              <label className="form-label">
-                Purchase Date <span className="text-red-500">*</span>
-              </label>
+              <label className="form-label">Purchase Date <span className="text-red-500">*</span></label>
               <input
                 type="date"
                 {...register('purchaseDate', { required: 'Purchase date is required' })}
@@ -182,9 +185,7 @@ export default function AssetFormModal({
               {errors.purchaseDate && <p className="form-error">{errors.purchaseDate.message}</p>}
             </div>
             <div>
-              <label className="form-label">
-                Location <span className="text-red-500">*</span>
-              </label>
+              <label className="form-label">Location <span className="text-red-500">*</span></label>
               <p className="form-helper -mt-0.5 mb-1">Building, floor, or room</p>
               <input
                 {...register('location', { required: 'Location is required' })}
@@ -198,50 +199,103 @@ export default function AssetFormModal({
 
         <hr className="border-slate-100" />
 
-        {/* Section: School */}
+        {/* School Section */}
         <div>
           <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
             School Section
           </h3>
-          <div>
-            <label className="form-label">School <span className="text-red-500">*</span></label>
-            <p className="form-helper -mt-0.5 mb-1">Which school section does this asset belong to?</p>
-            <div className="flex items-center gap-2 flex-wrap mt-1">
-              {SCHOOLS.map((school) => {
-                const colorMap: Record<SchoolSection, string> = {
-                  'Infant School':    'peer-checked:bg-pink-600 peer-checked:border-pink-600 peer-checked:text-white',
-                  'Junior School':    'peer-checked:bg-violet-600 peer-checked:border-violet-600 peer-checked:text-white',
-                  'Secondary School': 'peer-checked:bg-teal-600 peer-checked:border-teal-600 peer-checked:text-white',
-                };
-                return (
-                  <label
-                    key={school}
-                    className="relative cursor-pointer"
-                  >
+          <label className="form-label">School <span className="text-red-500">*</span></label>
+          <p className="form-helper -mt-0.5 mb-2">Which school section does this asset belong to?</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            {SCHOOLS.map((school) => (
+              <label key={school} className="relative cursor-pointer">
+                <input
+                  type="radio"
+                  value={school}
+                  {...register('school', { required: 'Please select a school section' })}
+                  className="peer sr-only"
+                />
+                <span
+                  className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-150
+                    border-slate-200 text-slate-600 bg-white hover:border-slate-300
+                    ${SCHOOL_COLORS[school]}`}
+                >
+                  {school}
+                </span>
+              </label>
+            ))}
+          </div>
+          {errors.school && <p className="form-error mt-1">{errors.school.message}</p>}
+        </div>
+
+        <hr className="border-slate-100" />
+
+        {/* Asset Identification — after school+category so tag is pre-filled */}
+        <div>
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+            Asset Identification
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="form-label">
+                Asset Tag / Unique ID <span className="text-red-500">*</span>
+              </label>
+              {mode === 'add' ? (
+                <>
+                  <p className="form-helper -mt-0.5 mb-1">
+                    Auto-generated from school &amp; category — you can edit if needed
+                  </p>
+                  <div className="relative">
                     <input
-                      type="radio"
-                      value={school}
-                      {...register('school', { required: 'Please select a school section' })}
-                      className="peer sr-only"
+                      {...register('assetTag', {
+                        required: 'Asset tag is required',
+                        pattern: {
+                          value: /^(INF|JUN|SEC)-[A-Z]{2}-\d{4}$/,
+                          message: 'Format must be INF/JUN/SEC-XX-0000',
+                        },
+                      })}
+                      placeholder="Select school & category above"
+                      className="form-input font-mono pr-9"
                     />
-                    <span
-                      className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-150
-                        border-slate-200 text-slate-600 bg-white hover:border-slate-300
-                        ${colorMap[school]}`}
-                    >
-                      {school}
-                    </span>
-                  </label>
-                );
-              })}
+                    {watchedSchool && watchedCategory && (
+                      <button
+                        type="button"
+                        onClick={regenerateTag}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 icon-btn"
+                        title="Generate a new ID"
+                      >
+                        <RefreshCw size={13} />
+                      </button>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="form-helper -mt-0.5 mb-1">Asset tag cannot be changed after creation</p>
+                  <input
+                    {...register('assetTag')}
+                    readOnly
+                    className="form-input font-mono bg-slate-50 text-slate-500 cursor-not-allowed"
+                  />
+                </>
+              )}
+              {errors.assetTag && <p className="form-error">{errors.assetTag.message}</p>}
             </div>
-            {errors.school && <p className="form-error mt-1">{errors.school.message}</p>}
+            <div>
+              <label className="form-label">Serial Number <span className="text-red-500">*</span></label>
+              <input
+                {...register('serialNumber', { required: 'Serial number is required' })}
+                placeholder="e.g. DLAT5540-2024-0045"
+                className="form-input font-mono"
+              />
+              {errors.serialNumber && <p className="form-error">{errors.serialNumber.message}</p>}
+            </div>
           </div>
         </div>
 
         <hr className="border-slate-100" />
 
-        {/* Section: Assignment (optional) */}
+        {/* Assignment (optional) */}
         <div>
           <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
             Assignment (Optional)
@@ -260,7 +314,7 @@ export default function AssetFormModal({
             </div>
             <div>
               <label className="form-label">Department</label>
-              <input {...register('department')} placeholder="e.g. Engineering" className="form-input" />
+              <input {...register('department')} placeholder="e.g. Year 3" className="form-input" />
             </div>
           </div>
         </div>
@@ -281,7 +335,7 @@ export default function AssetFormModal({
           />
         </div>
 
-        {/* Footer Actions */}
+        {/* Footer */}
         <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
           <button type="button" onClick={onClose} className="btn-secondary">
             Cancel
