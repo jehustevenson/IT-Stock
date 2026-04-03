@@ -1,3 +1,5 @@
+'use client';
+
 import React from 'react';
 import AppLayout from '@/components/AppLayout';
 import DashboardHeader from './components/DashboardHeader';
@@ -6,25 +8,30 @@ import CategoryBarChart from './components/CategoryBarChart';
 import StatusDonutChart from './components/StatusDonutChart';
 import AuditLogFeed from './components/AuditLogFeed';
 import OverdueAlert from './components/OverdueAlert';
-import { createClient } from '@/lib/supabase/server';
-import { toAsset, toAssignment, toAuditLog } from '@/lib/supabase/types';
+import { useAppData } from '@/lib/AppDataContext';
 
-export const revalidate = 0;
-
-export default async function DashboardPage() {
-  const supabase = await createClient();
-
-  const [assetsRes, assignmentsRes, logsRes] = await Promise.all([
-    supabase.from('assets').select('*').order('asset_tag'),
-    supabase.from('assignments').select('*').order('date_assigned', { ascending: false }),
-    supabase.from('audit_logs').select('*').order('timestamp', { ascending: false }).limit(8),
-  ]);
-
-  const assets      = (assetsRes.data     ?? []).map(toAsset);
-  const assignments = (assignmentsRes.data ?? []).map(toAssignment);
-  const auditLogs   = (logsRes.data        ?? []).map(toAuditLog);
+export default function DashboardPage() {
+  const { assets, assignments } = useAppData();
 
   const overdueAssignments = assignments.filter((a) => a.status === 'Overdue');
+
+  // Build audit-log-style feed from assignments for recent activity
+  const recentLogs = [...assignments]
+    .sort((a, b) => b.dateAssigned.localeCompare(a.dateAssigned))
+    .slice(0, 8)
+    .map((a) => ({
+      id:          a.id,
+      timestamp:   a.dateAssigned + 'T00:00:00',
+      action:      (a.status === 'Returned' ? 'Returned' : 'Assigned') as
+                     'Added' | 'Assigned' | 'Returned' | 'Updated' | 'Deleted' | 'Flagged',
+      assetTag:    a.assetTag,
+      assetName:   a.assetName,
+      performedBy: 'Admin (IT)',
+      details:
+        a.status === 'Returned'
+          ? `Returned by ${a.staffName} (${a.staffId}) — ${a.department}`
+          : `Assigned to ${a.staffName} (${a.staffId}) — ${a.department}`,
+    }));
 
   return (
     <AppLayout>
@@ -42,7 +49,7 @@ export default async function DashboardPage() {
             <StatusDonutChart assets={assets} />
           </div>
         </div>
-        <AuditLogFeed logs={auditLogs} />
+        <AuditLogFeed logs={recentLogs} />
       </div>
     </AppLayout>
   );

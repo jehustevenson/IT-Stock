@@ -17,20 +17,20 @@ const CATEGORIES: AssetCategory[] = [
 const STATUSES: AssetStatus[] = ['Available', 'Assigned', 'Faulty', 'Retired'];
 
 export default function InventoryClient() {
-  const { assets, addAsset, updateAsset, deleteAsset, deleteAssets, changeAssetStatus } = useAppData();
+  const { assets, loading, addAsset, updateAsset, deleteAsset, deleteAssets, changeAssetStatus } = useAppData();
 
-  const [search, setSearch] = useState('');
+  const [search, setSearch]               = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('All');
-  const [filterSchool, setFilterSchool] = useState<string>('All');
-  const [filterStatus, setFilterStatus] = useState<string>('All');
-  const [sortKey, setSortKey] = useState<keyof Asset>('assetTag');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [filterSchool, setFilterSchool]   = useState<string>('All');
+  const [filterStatus, setFilterStatus]   = useState<string>('All');
+  const [sortKey, setSortKey]             = useState<keyof Asset>('assetTag');
+  const [sortDir, setSortDir]             = useState<'asc' | 'desc'>('asc');
+  const [selectedIds, setSelectedIds]     = useState<Set<string>>(new Set());
 
-  const [addModalOpen, setAddModalOpen] = useState(false);
-  const [editAsset, setEditAsset] = useState<Asset | null>(null);
-  const [qrAsset, setQrAsset] = useState<Asset | null>(null);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [addModalOpen, setAddModalOpen]   = useState(false);
+  const [editAsset, setEditAsset]         = useState<Asset | null>(null);
+  const [qrAsset, setQrAsset]             = useState<Asset | null>(null);
+  const [deleteId, setDeleteId]           = useState<string | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
@@ -48,8 +48,8 @@ export default function InventoryClient() {
       );
     }
     if (filterCategory !== 'All') result = result.filter((a) => a.category === filterCategory);
-    if (filterSchool !== 'All') result = result.filter((a) => a.school === filterSchool);
-    if (filterStatus !== 'All') result = result.filter((a) => a.status === filterStatus);
+    if (filterSchool !== 'All')   result = result.filter((a) => a.school === filterSchool);
+    if (filterStatus !== 'All')   result = result.filter((a) => a.status === filterStatus);
 
     result = [...result].sort((a, b) => {
       const av = (a[sortKey] ?? '') as string;
@@ -65,45 +65,63 @@ export default function InventoryClient() {
     else { setSortKey(key); setSortDir('asc'); }
   }
 
-  function handleAdd(data: Omit<Asset, 'id'>) {
-    const newAsset = addAsset(data);
-    setAddModalOpen(false);
-    toast.success(`Asset ${newAsset.assetTag} added to inventory`);
+  async function handleAdd(data: Omit<Asset, 'id'>) {
+    try {
+      const newAsset = await addAsset(data);
+      setAddModalOpen(false);
+      toast.success(`Asset ${newAsset.assetTag} added to inventory`);
+    } catch (err) {
+      toast.error((err as Error).message ?? 'Failed to add asset');
+    }
   }
 
-  function handleEdit(data: Asset) {
-    updateAsset(data);
-    setEditAsset(null);
-    toast.success(`Asset ${data.assetTag} updated successfully`);
+  async function handleEdit(data: Asset) {
+    try {
+      await updateAsset(data);
+      setEditAsset(null);
+      toast.success(`Asset ${data.assetTag} updated successfully`);
+    } catch (err) {
+      toast.error((err as Error).message ?? 'Failed to update asset');
+    }
   }
 
-  function handleDeleteConfirm() {
+  async function handleDeleteConfirm() {
     if (!deleteId) return;
     setDeleteLoading(true);
     const asset = assets.find((a) => a.id === deleteId);
-    setTimeout(() => {
-      deleteAsset(deleteId);
+    try {
+      await deleteAsset(deleteId);
       setDeleteId(null);
-      setDeleteLoading(false);
       toast.success(`Asset ${asset?.assetTag} removed from inventory`);
-    }, 600);
+    } catch (err) {
+      toast.error((err as Error).message ?? 'Failed to delete asset');
+    } finally {
+      setDeleteLoading(false);
+    }
   }
 
-  function handleBulkDelete() {
+  async function handleBulkDelete() {
     setDeleteLoading(true);
     const count = selectedIds.size;
-    setTimeout(() => {
-      deleteAssets(selectedIds);
+    try {
+      await deleteAssets(selectedIds);
       setSelectedIds(new Set());
       setBulkDeleteOpen(false);
-      setDeleteLoading(false);
       toast.success(`${count} assets removed from inventory`);
-    }, 700);
+    } catch (err) {
+      toast.error((err as Error).message ?? 'Failed to delete assets');
+    } finally {
+      setDeleteLoading(false);
+    }
   }
 
-  function handleStatusChange(id: string, status: AssetStatus) {
-    changeAssetStatus(id, status);
-    toast.success('Asset status updated');
+  async function handleStatusChange(id: string, status: AssetStatus) {
+    try {
+      await changeAssetStatus(id, status);
+      toast.success('Asset status updated');
+    } catch (err) {
+      toast.error((err as Error).message ?? 'Failed to update status');
+    }
   }
 
   const categoryStats = useMemo(() => {
@@ -129,7 +147,7 @@ export default function InventoryClient() {
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Inventory Management</h1>
             <p className="text-sm text-slate-500 mt-1">
-              {assets.length} assets tracked across all categories
+              {loading ? 'Loading…' : `${assets.length} assets tracked across all categories`}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -190,7 +208,7 @@ export default function InventoryClient() {
           </div>
         </div>
 
-        {/* Search + Status Filter Bar */}
+        {/* Search + Status Filter */}
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -243,19 +261,31 @@ export default function InventoryClient() {
           </div>
         </div>
 
-        {/* Table */}
-        <AssetTable
-          assets={filtered}
-          selectedIds={selectedIds}
-          onSelectChange={setSelectedIds}
-          sortKey={sortKey}
-          sortDir={sortDir}
-          onSort={handleSort}
-          onEdit={setEditAsset}
-          onDelete={setDeleteId}
-          onQR={setQrAsset}
-          onStatusChange={handleStatusChange}
-        />
+        {/* Loading skeleton */}
+        {loading ? (
+          <div className="card p-12 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <svg className="animate-spin w-6 h-6 text-blue-500" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <p className="text-sm text-slate-500">Loading inventory…</p>
+            </div>
+          </div>
+        ) : (
+          <AssetTable
+            assets={filtered}
+            selectedIds={selectedIds}
+            onSelectChange={setSelectedIds}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            onSort={handleSort}
+            onEdit={setEditAsset}
+            onDelete={setDeleteId}
+            onQR={setQrAsset}
+            onStatusChange={handleStatusChange}
+          />
+        )}
       </div>
 
       {/* Modals */}

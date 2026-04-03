@@ -14,14 +14,14 @@ const DEPARTMENTS = ['All', 'Engineering', 'Design', 'Finance', 'Administration'
 const STATUSES = ['All', 'Active', 'Overdue', 'Returned'];
 
 export default function AssignmentClient() {
-  const { assignments, assets, addAssignment, returnAssignment } = useAppData();
+  const { assignments, assets, loading, addAssignment, returnAssignment } = useAppData();
 
-  const [search, setSearch] = useState('');
-  const [filterDept, setFilterDept] = useState('All');
+  const [search, setSearch]           = useState('');
+  const [filterDept, setFilterDept]   = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
 
   const [assignModalOpen, setAssignModalOpen] = useState(false);
-  const [returnAssignmentTarget, setReturnAssignmentTarget] = useState<Assignment | null>(null);
+  const [returnTarget, setReturnTarget]       = useState<Assignment | null>(null);
 
   const filtered = useMemo(() => {
     let result = assignments;
@@ -36,33 +36,36 @@ export default function AssignmentClient() {
           a.department.toLowerCase().includes(q)
       );
     }
-    if (filterDept !== 'All') result = result.filter((a) => a.department === filterDept);
+    if (filterDept !== 'All')   result = result.filter((a) => a.department === filterDept);
     if (filterStatus !== 'All') result = result.filter((a) => a.status === filterStatus);
     return result;
   }, [assignments, search, filterDept, filterStatus]);
 
   const stats = useMemo(() => ({
-    total: assignments.length,
-    active: assignments.filter((a) => a.status === 'Active').length,
-    overdue: assignments.filter((a) => a.status === 'Overdue').length,
+    total:    assignments.length,
+    active:   assignments.filter((a) => a.status === 'Active').length,
+    overdue:  assignments.filter((a) => a.status === 'Overdue').length,
     returned: assignments.filter((a) => a.status === 'Returned').length,
   }), [assignments]);
 
-  // Only assets that are Available (not already assigned/faulty/retired)
   const availableAssets = useMemo(
     () => assets.filter((a) => a.status === 'Available'),
     [assets]
   );
 
-  function handleNewAssignment(data: Omit<Assignment, 'id'>) {
-    addAssignment(data);
-    setAssignModalOpen(false);
-    toast.success(`${data.assetTag} assigned to ${data.staffName}`);
+  async function handleNewAssignment(data: Omit<Assignment, 'id'>) {
+    try {
+      await addAssignment(data);
+      setAssignModalOpen(false);
+      toast.success(`${data.assetTag} assigned to ${data.staffName}`);
+    } catch (err) {
+      toast.error((err as Error).message ?? 'Failed to create assignment');
+    }
   }
 
   function handleReturn(id: string, returnedDate: string) {
     returnAssignment(id, returnedDate);
-    setReturnAssignmentTarget(null);
+    setReturnTarget(null);
     toast.success('Asset checked in — inventory updated to Available');
   }
 
@@ -75,7 +78,7 @@ export default function AssignmentClient() {
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Assignment Tracking</h1>
             <p className="text-sm text-slate-500 mt-1">
-              Manage equipment assignments and track returns
+              {loading ? 'Loading…' : 'Manage equipment assignments and track returns'}
             </p>
           </div>
           <button onClick={() => setAssignModalOpen(true)} className="btn-primary text-xs gap-1.5">
@@ -135,7 +138,7 @@ export default function AssignmentClient() {
           </div>
         )}
 
-        {/* Available assets hint */}
+        {/* Available hint */}
         {availableAssets.length > 0 && (
           <div className="flex items-center gap-3 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-lg">
             <UserCheck size={15} className="text-emerald-600 flex-shrink-0" />
@@ -195,8 +198,20 @@ export default function AssignmentClient() {
           </span>
         </div>
 
-        {/* Table */}
-        <AssignmentTable assignments={filtered} onReturn={setReturnAssignmentTarget} />
+        {/* Loading skeleton */}
+        {loading ? (
+          <div className="card p-12 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <svg className="animate-spin w-6 h-6 text-blue-500" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <p className="text-sm text-slate-500">Loading assignments…</p>
+            </div>
+          </div>
+        ) : (
+          <AssignmentTable assignments={filtered} onReturn={setReturnTarget} />
+        )}
       </div>
 
       {/* Modals */}
@@ -206,11 +221,11 @@ export default function AssignmentClient() {
         onSubmit={handleNewAssignment}
         availableAssets={availableAssets}
       />
-      {returnAssignmentTarget && (
+      {returnTarget && (
         <ReturnModal
-          open={!!returnAssignmentTarget}
-          onClose={() => setReturnAssignmentTarget(null)}
-          assignment={returnAssignmentTarget}
+          open={!!returnTarget}
+          onClose={() => setReturnTarget(null)}
+          assignment={returnTarget}
           onConfirm={handleReturn}
         />
       )}
