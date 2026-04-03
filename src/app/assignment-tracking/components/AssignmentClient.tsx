@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import { toast } from 'sonner';
 import { Toaster } from 'sonner';
-import { Plus, Search, Filter, AlertTriangle, UserCheck, RotateCcw, Clock, RefreshCw } from 'lucide-react';
-import type { Assignment } from '@/lib/mockData';
+import { Plus, Search, Filter, AlertTriangle, UserCheck, RotateCcw, Clock } from 'lucide-react';
+import { Assignment } from '@/lib/mockData';
+import { useAppData } from '@/lib/AppDataContext';
 import AssignmentTable from './AssignmentTable';
 import AssignmentFormModal from './AssignmentFormModal';
 import ReturnModal from './ReturnModal';
@@ -12,48 +13,15 @@ import ReturnModal from './ReturnModal';
 const DEPARTMENTS = ['All', 'Engineering', 'Design', 'Finance', 'Administration', 'IT Infrastructure', 'Sales'];
 const STATUSES = ['All', 'Active', 'Overdue', 'Returned'];
 
-function dbRowToAssignment(row: Record<string, unknown>): Assignment {
-  return {
-    id:             row.id as string,
-    assetId:        row.asset_id as string,
-    assetTag:       row.asset_tag as string,
-    assetName:      row.asset_name as string,
-    category:       row.category as Assignment['category'],
-    staffName:      row.staff_name as string,
-    staffId:        row.staff_id as string,
-    department:     row.department as string,
-    dateAssigned:   row.date_assigned as string,
-    expectedReturn: row.expected_return as string,
-    status:         row.status as Assignment['status'],
-    returnedDate:   (row.returned_date as string) ?? undefined,
-    notes:          (row.notes as string) ?? undefined,
-  };
-}
-
 export default function AssignmentClient() {
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { assignments, assets, addAssignment, returnAssignment } = useAppData();
+
   const [search, setSearch] = useState('');
   const [filterDept, setFilterDept] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
+
   const [assignModalOpen, setAssignModalOpen] = useState(false);
-  const [returnAssignment, setReturnAssignment] = useState<Assignment | null>(null);
-
-  const fetchAssignments = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/assignments');
-      if (!res.ok) throw new Error();
-      const rows = await res.json();
-      setAssignments(rows.map(dbRowToAssignment));
-    } catch {
-      toast.error('Could not load assignments');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { fetchAssignments(); }, [fetchAssignments]);
+  const [returnAssignmentTarget, setReturnAssignmentTarget] = useState<Assignment | null>(null);
 
   const filtered = useMemo(() => {
     let result = assignments;
@@ -68,70 +36,55 @@ export default function AssignmentClient() {
           a.department.toLowerCase().includes(q)
       );
     }
-    if (filterDept !== 'All')   result = result.filter((a) => a.department === filterDept);
+    if (filterDept !== 'All') result = result.filter((a) => a.department === filterDept);
     if (filterStatus !== 'All') result = result.filter((a) => a.status === filterStatus);
     return result;
   }, [assignments, search, filterDept, filterStatus]);
 
   const stats = useMemo(() => ({
-    total:    assignments.length,
-    active:   assignments.filter((a) => a.status === 'Active').length,
-    overdue:  assignments.filter((a) => a.status === 'Overdue').length,
+    total: assignments.length,
+    active: assignments.filter((a) => a.status === 'Active').length,
+    overdue: assignments.filter((a) => a.status === 'Overdue').length,
     returned: assignments.filter((a) => a.status === 'Returned').length,
   }), [assignments]);
 
-  // Returns a promise so AssignmentFormModal can catch and surface API errors
-  async function handleNewAssignment(data: Omit<Assignment, 'id'>) {
-    const res = await fetch('/api/assignments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+  // Only assets that are Available (not already assigned/faulty/retired)
+  const availableAssets = useMemo(
+    () => assets.filter((a) => a.status === 'Available'),
+    [assets]
+  );
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      // Throw so the modal can catch and display the error inline
-      throw new Error(err.error ?? 'Failed to create assignment');
-    }
-
-    const row = await res.json();
-    setAssignments((prev) => [dbRowToAssignment(row), ...prev]);
+  function handleNewAssignment(data: Omit<Assignment, 'id'>) {
+    addAssignment(data);
     setAssignModalOpen(false);
     toast.success(`${data.assetTag} assigned to ${data.staffName}`);
   }
 
-  async function handleReturn(id: string, returnedDate: string) {
-    // The actual API call is now done inside ReturnModal itself.
-    // This callback just updates local state on success.
-    setAssignments((prev) =>
-      prev.map((a) => a.id === id ? { ...a, status: 'Returned' as const, returnedDate } : a)
-    );
-    setReturnAssignment(null);
-    toast.success('Asset checked in successfully');
+  function handleReturn(id: string, returnedDate: string) {
+    returnAssignment(id, returnedDate);
+    setReturnAssignmentTarget(null);
+    toast.success('Asset checked in — inventory updated to Available');
   }
 
   return (
     <>
       <Toaster position="bottom-right" richColors />
       <div className="px-6 lg:px-8 xl:px-10 py-6 max-w-screen-2xl mx-auto space-y-5">
+        {/* Header */}
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Assignment Tracking</h1>
-            <p className="text-sm text-slate-500 mt-1">Manage equipment assignments and track returns</p>
+            <p className="text-sm text-slate-500 mt-1">
+              Manage equipment assignments and track returns
+            </p>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={fetchAssignments} className="btn-secondary text-xs gap-1.5" disabled={loading}>
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-              Refresh
-            </button>
-            <button onClick={() => setAssignModalOpen(true)} className="btn-primary text-xs gap-1.5">
-              <Plus size={14} />
-              New Assignment
-            </button>
-          </div>
+          <button onClick={() => setAssignModalOpen(true)} className="btn-primary text-xs gap-1.5">
+            <Plus size={14} />
+            New Assignment
+          </button>
         </div>
 
-        {/* Stats strip */}
+        {/* Stats Strip */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="card px-4 py-3 flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
@@ -171,14 +124,30 @@ export default function AssignmentClient() {
           </div>
         </div>
 
+        {/* Overdue Banner */}
         {stats.overdue > 0 && (
           <div className="flex items-center gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg">
             <Clock size={15} className="text-amber-600 flex-shrink-0" />
             <p className="text-sm text-amber-800">
-              <span className="font-semibold">
-                {stats.overdue} assignment{stats.overdue > 1 ? 's are' : ' is'} overdue.
-              </span>{' '}
+              <span className="font-semibold">{stats.overdue} assignment{stats.overdue > 1 ? 's are' : ' is'} overdue.</span>{' '}
               Contact the assigned staff members to arrange equipment return.
+            </p>
+          </div>
+        )}
+
+        {/* Available assets hint */}
+        {availableAssets.length > 0 && (
+          <div className="flex items-center gap-3 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+            <UserCheck size={15} className="text-emerald-600 flex-shrink-0" />
+            <p className="text-sm text-emerald-800">
+              <span className="font-semibold">{availableAssets.length} asset{availableAssets.length > 1 ? 's are' : ' is'} available</span>{' '}
+              and ready to be assigned.{' '}
+              <button
+                onClick={() => setAssignModalOpen(true)}
+                className="underline font-semibold hover:text-emerald-900 transition-colors"
+              >
+                Create assignment →
+              </button>
             </p>
           </div>
         )}
@@ -203,13 +172,15 @@ export default function AssignmentClient() {
               onChange={(e) => setFilterDept(e.target.value)}
               className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
-              {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
+              {DEPARTMENTS.map((d) => (
+                <option key={`dept-${d}`} value={d}>{d}</option>
+              ))}
             </select>
           </div>
           <div className="flex items-center gap-1">
             {STATUSES.map((s) => (
               <button
-                key={s}
+                key={`asgn-status-${s}`}
                 onClick={() => setFilterStatus(s)}
                 className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all duration-150 ${
                   filterStatus === s ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-100'
@@ -224,25 +195,22 @@ export default function AssignmentClient() {
           </span>
         </div>
 
-        {loading ? (
-          <div className="card flex items-center justify-center py-16">
-            <RefreshCw size={20} className="animate-spin text-slate-400" />
-          </div>
-        ) : (
-          <AssignmentTable assignments={filtered} onReturn={setReturnAssignment} />
-        )}
+        {/* Table */}
+        <AssignmentTable assignments={filtered} onReturn={setReturnAssignmentTarget} />
       </div>
 
+      {/* Modals */}
       <AssignmentFormModal
         open={assignModalOpen}
         onClose={() => setAssignModalOpen(false)}
         onSubmit={handleNewAssignment}
+        availableAssets={availableAssets}
       />
-      {returnAssignment && (
+      {returnAssignmentTarget && (
         <ReturnModal
-          open={!!returnAssignment}
-          onClose={() => setReturnAssignment(null)}
-          assignment={returnAssignment}
+          open={!!returnAssignmentTarget}
+          onClose={() => setReturnAssignmentTarget(null)}
+          assignment={returnAssignmentTarget}
           onConfirm={handleReturn}
         />
       )}

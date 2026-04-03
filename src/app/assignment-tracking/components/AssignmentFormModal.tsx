@@ -3,15 +3,16 @@
 import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import Modal from '@/components/ui/Modal';
-import { Assignment, AssetCategory } from '@/lib/mockData';
-import { Loader2 } from 'lucide-react';
+import { Assignment, AssetCategory, Asset } from '@/lib/mockData';
+import { Loader2, PackageCheck } from 'lucide-react';
 
 type FormData = Omit<Assignment, 'id' | 'status' | 'returnedDate'>;
 
 interface AssignmentFormModalProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: Omit<Assignment, 'id'>) => Promise<void>;
+  onSubmit: (data: Omit<Assignment, 'id'>) => void;
+  availableAssets?: Asset[];
 }
 
 const CATEGORIES: AssetCategory[] = [
@@ -19,39 +20,28 @@ const CATEGORIES: AssetCategory[] = [
 ];
 
 const DEPARTMENTS = [
-  'Engineering',
-  'Design',
-  'Finance',
-  'Administration',
-  'IT Infrastructure',
-  'Sales',
-  'Marketing',
-  'HR',
-  'Legal',
-  'Operations',
+  'Engineering', 'Design', 'Finance', 'Administration',
+  'IT Infrastructure', 'Sales', 'Marketing', 'HR', 'Legal', 'Operations',
 ];
-
-// Accepts EMP-0000 or DEPT-XXXX formats
-const STAFF_ID_PATTERN = /^(EMP-\d{4}|DEPT-[A-Z]+)$/;
 
 export default function AssignmentFormModal({
   open,
   onClose,
   onSubmit,
+  availableAssets = [],
 }: AssignmentFormModalProps) {
-  const today = new Date().toISOString().split('T')[0];
-
   const {
     register,
     handleSubmit,
     reset,
-    setError,
+    setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     defaultValues: {
       category: 'Laptop',
       department: 'Engineering',
-      dateAssigned: today,
+      dateAssigned: new Date().toISOString().split('T')[0],
     },
   });
 
@@ -60,20 +50,27 @@ export default function AssignmentFormModal({
       reset({
         category: 'Laptop',
         department: 'Engineering',
-        dateAssigned: today,
+        dateAssigned: new Date().toISOString().split('T')[0],
       });
     }
-  }, [open, reset, today]);
+  }, [open, reset]);
+
+  // When user picks a tag from the dropdown, auto-fill name + category
+  function handleAssetSelect(e: React.ChangeEvent<HTMLSelectElement>) {
+    const tag = e.target.value;
+    setValue('assetTag', tag);
+    const found = availableAssets.find((a) => a.assetTag === tag);
+    if (found) {
+      setValue('assetName', found.name);
+      setValue('category', found.category);
+    }
+  }
+
+  const watchedTag = watch('assetTag');
 
   const onFormSubmit = async (data: FormData) => {
-    try {
-      await onSubmit({ ...data, status: 'Active' });
-    } catch (err: unknown) {
-      // Surface API errors back into the form
-      const message =
-        err instanceof Error ? err.message : 'Failed to create assignment. Please try again.';
-      setError('root', { message });
-    }
+    await new Promise((r) => setTimeout(r, 400));
+    onSubmit({ ...data, status: 'Active' });
   };
 
   return (
@@ -85,11 +82,38 @@ export default function AssignmentFormModal({
       size="lg"
     >
       <form onSubmit={handleSubmit(onFormSubmit)} className="px-6 py-5 space-y-5">
+
         {/* Asset Details */}
         <div>
           <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
             Asset Details
           </h3>
+
+          {/* Quick-pick from available assets */}
+          {availableAssets.length > 0 && (
+            <div className="mb-4">
+              <label className="form-label flex items-center gap-1.5">
+                <PackageCheck size={13} className="text-emerald-600" />
+                Pick from Available Assets
+              </label>
+              <p className="form-helper -mt-0.5 mb-1">
+                {availableAssets.length} asset{availableAssets.length > 1 ? 's' : ''} ready to assign — selecting one auto-fills the fields below
+              </p>
+              <select
+                onChange={handleAssetSelect}
+                defaultValue=""
+                className="form-input text-sm"
+              >
+                <option value="" disabled>— Select an available asset —</option>
+                {availableAssets.map((a) => (
+                  <option key={a.id} value={a.assetTag}>
+                    {a.assetTag} — {a.name} ({a.category}) · {a.location}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="form-label">
@@ -143,10 +167,7 @@ export default function AssignmentFormModal({
                 Staff Name <span className="text-red-500">*</span>
               </label>
               <input
-                {...register('staffName', {
-                  required: 'Staff name is required',
-                  minLength: { value: 2, message: 'Name too short' },
-                })}
+                {...register('staffName', { required: 'Staff name is required', minLength: { value: 2, message: 'Name too short' } })}
                 placeholder="e.g. Priya Nair"
                 className="form-input"
               />
@@ -156,18 +177,13 @@ export default function AssignmentFormModal({
               <label className="form-label">
                 Staff ID <span className="text-red-500">*</span>
               </label>
-              <p className="form-helper -mt-0.5 mb-1">
-                Employee ID (EMP-0000) or Department ID (DEPT-INFRA)
-              </p>
+              <p className="form-helper -mt-0.5 mb-1">Employee ID from HR system</p>
               <input
                 {...register('staffId', {
                   required: 'Staff ID is required',
-                  pattern: {
-                    value: STAFF_ID_PATTERN,
-                    message: 'Use format EMP-0000 or DEPT-NAME',
-                  },
+                  pattern: { value: /^EMP-\d{4}$/, message: 'Format must be EMP-0000' },
                 })}
-                placeholder="EMP-1042 or DEPT-INFRA"
+                placeholder="EMP-1042"
                 className="form-input font-mono"
               />
               {errors.staffId && <p className="form-error">{errors.staffId.message}</p>}
@@ -208,17 +224,13 @@ export default function AssignmentFormModal({
               <label className="form-label">
                 Expected Return Date <span className="text-red-500">*</span>
               </label>
-              <p className="form-helper -mt-0.5 mb-1">
-                When the asset should be returned — used for overdue tracking
-              </p>
+              <p className="form-helper -mt-0.5 mb-1">Used for overdue tracking</p>
               <input
                 type="date"
                 {...register('expectedReturn', { required: 'Expected return date is required' })}
                 className="form-input"
               />
-              {errors.expectedReturn && (
-                <p className="form-error">{errors.expectedReturn.message}</p>
-              )}
+              {errors.expectedReturn && <p className="form-error">{errors.expectedReturn.message}</p>}
             </div>
           </div>
         </div>
@@ -238,13 +250,6 @@ export default function AssignmentFormModal({
             className="form-input resize-none"
           />
         </div>
-
-        {/* Root/API error */}
-        {errors.root && (
-          <div className="px-3 py-2.5 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-xs text-red-700">{errors.root.message}</p>
-          </div>
-        )}
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
