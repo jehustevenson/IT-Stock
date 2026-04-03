@@ -148,6 +148,7 @@ export default function AssetTable({
     { key: 'name', label: 'Name', sortable: true },
     { key: 'category', label: 'Category', sortable: true },
     { key: 'serialNumber', label: 'Serial No.', sortable: false },
+    { key: 'school', label: 'School', sortable: true },
     { key: 'status', label: 'Status', sortable: true },
     { key: 'location', label: 'Location', sortable: true },
     { key: 'purchaseDate', label: 'Purchased', sortable: true },
@@ -171,7 +172,7 @@ export default function AssetTable({
   return (
     <div className="card overflow-hidden">
       <div className="overflow-x-auto scrollbar-thin">
-        <table className="w-full min-w-[900px]">
+        <table className="w-full min-w-[1000px]">
           <thead className="bg-slate-50 border-b border-slate-100">
             <tr>
               <th className="table-th w-10">
@@ -231,6 +232,17 @@ export default function AssetTable({
                   </td>
                   <td className="table-td">
                     <span className="font-mono text-xs text-slate-500">{asset.serialNumber}</span>
+                  </td>
+
+                  {/* School Column */}
+                  <td className="table-td">
+                    {asset.school ? (
+                      <span className="inline-flex items-center px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-xs font-medium">
+                        {asset.school}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-300">—</span>
+                    )}
                   </td>
 
                   {/* Status with portal dropdown */}

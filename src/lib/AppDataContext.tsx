@@ -2,25 +2,28 @@
 
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import {
-  ASSETS as INITIAL_ASSETS,
-  ASSIGNMENTS as INITIAL_ASSIGNMENTS,
   Asset,
   AssetStatus,
   Assignment,
+  ASSETS as SEED_ASSETS,
+  ASSIGNMENTS as SEED_ASSIGNMENTS,
 } from '@/lib/mockData';
+
+// Deep-clone seed data so mutations on the arrays (e.g. old ASSETS.unshift)
+// never corrupt the context's initial state.
+const INITIAL_ASSETS: Asset[]           = SEED_ASSETS.map((a) => ({ ...a }));
+const INITIAL_ASSIGNMENTS: Assignment[] = SEED_ASSIGNMENTS.map((a) => ({ ...a }));
 
 interface AppDataContextValue {
   assets: Asset[];
   assignments: Assignment[];
 
-  // Asset actions
   addAsset: (asset: Omit<Asset, 'id'>) => Asset;
   updateAsset: (asset: Asset) => void;
   deleteAsset: (id: string) => void;
   deleteAssets: (ids: Set<string>) => void;
   changeAssetStatus: (id: string, status: AssetStatus) => void;
 
-  // Assignment actions
   addAssignment: (assignment: Omit<Assignment, 'id'>) => void;
   returnAssignment: (id: string, returnedDate: string) => void;
 }
@@ -28,10 +31,8 @@ interface AppDataContextValue {
 const AppDataContext = createContext<AppDataContextValue | null>(null);
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
-  const [assets, setAssets] = useState<Asset[]>(INITIAL_ASSETS);
-  const [assignments, setAssignments] = useState<Assignment[]>(INITIAL_ASSIGNMENTS);
-
-  /* ── Asset actions ─────────────────────────────────────────── */
+  const [assets, setAssets]           = useState<Asset[]>(() => INITIAL_ASSETS);
+  const [assignments, setAssignments] = useState<Assignment[]>(() => INITIAL_ASSIGNMENTS);
 
   const addAsset = useCallback((data: Omit<Asset, 'id'>): Asset => {
     const newAsset: Asset = { ...data, id: `asset-${Date.now()}` };
@@ -45,7 +46,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const deleteAsset = useCallback((id: string) => {
     setAssets((prev) => prev.filter((a) => a.id !== id));
-    // Also close any active assignments for this asset
     setAssignments((prev) =>
       prev.map((asgn) =>
         asgn.assetId === id && asgn.status !== 'Returned'
@@ -70,13 +70,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setAssets((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)));
   }, []);
 
-  /* ── Assignment actions ────────────────────────────────────── */
-
   const addAssignment = useCallback((data: Omit<Assignment, 'id'>) => {
     const newAsgn: Assignment = { ...data, id: `asgn-${Date.now()}` };
     setAssignments((prev) => [newAsgn, ...prev]);
-
-    // Sync the matching asset → Assigned
     setAssets((prev) =>
       prev.map((a) =>
         a.assetTag === data.assetTag
@@ -96,26 +92,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     let assetTag = '';
     setAssignments((prev) =>
       prev.map((a) => {
-        if (a.id === id) {
-          assetTag = a.assetTag;
-          return { ...a, status: 'Returned' as const, returnedDate };
-        }
+        if (a.id === id) { assetTag = a.assetTag; return { ...a, status: 'Returned' as const, returnedDate }; }
         return a;
       })
     );
-
-    // Sync the matching asset → Available and clear assignee fields
     if (assetTag) {
       setAssets((prev) =>
         prev.map((a) =>
           a.assetTag === assetTag
-            ? {
-                ...a,
-                status: 'Available' as AssetStatus,
-                assignedTo: undefined,
-                assignedToId: undefined,
-                department: undefined,
-              }
+            ? { ...a, status: 'Available' as AssetStatus, assignedTo: undefined, assignedToId: undefined, department: undefined }
             : a
         )
       );
@@ -123,19 +108,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AppDataContext.Provider
-      value={{
-        assets,
-        assignments,
-        addAsset,
-        updateAsset,
-        deleteAsset,
-        deleteAssets,
-        changeAssetStatus,
-        addAssignment,
-        returnAssignment,
-      }}
-    >
+    <AppDataContext.Provider value={{ assets, assignments, addAsset, updateAsset, deleteAsset, deleteAssets, changeAssetStatus, addAssignment, returnAssignment }}>
       {children}
     </AppDataContext.Provider>
   );

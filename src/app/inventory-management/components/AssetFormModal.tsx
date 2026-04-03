@@ -85,6 +85,8 @@ export default function AssetFormModal({
 
   const watchedSchool   = useWatch({ control, name: 'school' });
   const watchedCategory = useWatch({ control, name: 'category' });
+  const watchedStatus   = useWatch({ control, name: 'status' });
+  const showAssignment  = watchedStatus === 'Assigned';
 
   const regenerateTag = useCallback(() => {
     if (watchedSchool && watchedCategory) {
@@ -141,7 +143,7 @@ export default function AssetFormModal({
     >
       <form onSubmit={handleSubmit(onFormSubmit)} className="px-6 py-5 space-y-5">
 
-        {/* Device Details — first so school+category drive the tag */}
+        {/* Device Details */}
         <div>
           <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
             Device Details
@@ -230,7 +232,7 @@ export default function AssetFormModal({
 
         <hr className="border-slate-100" />
 
-        {/* Asset Identification — after school+category so tag is pre-filled */}
+        {/* Asset Identification */}
         <div>
           <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
             Asset Identification
@@ -293,31 +295,46 @@ export default function AssetFormModal({
           </div>
         </div>
 
-        <hr className="border-slate-100" />
-
-        {/* Assignment (optional) */}
-        <div>
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-            Assignment (Optional)
-          </h3>
-          <p className="text-xs text-slate-400 mb-3">
-            Fill these fields if the asset is currently assigned to a staff member.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Assignment Details — only shown when status is Assigned */}
+        {showAssignment && (
+          <>
+            <hr className="border-slate-100" />
             <div>
-              <label className="form-label">Staff Name</label>
-              <input {...register('assignedTo')} placeholder="e.g. Marcus Osei" className="form-input" />
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                Assignment Details
+              </h3>
+              <p className="text-xs text-slate-400 mb-3">
+                Enter the staff member this asset is being assigned to.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="form-label">Staff Name</label>
+                  <input
+                    {...register('assignedTo')}
+                    placeholder="e.g. Marcus Osei"
+                    className="form-input"
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Staff ID</label>
+                  <input
+                    {...register('assignedToId')}
+                    placeholder="e.g. EMP-1042"
+                    className="form-input font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Department</label>
+                  <input
+                    {...register('department')}
+                    placeholder="e.g. Year 3"
+                    className="form-input"
+                  />
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="form-label">Staff ID</label>
-              <input {...register('assignedToId')} placeholder="e.g. EMP-1042" className="form-input font-mono" />
-            </div>
-            <div>
-              <label className="form-label">Department</label>
-              <input {...register('department')} placeholder="e.g. Year 3" className="form-input" />
-            </div>
-          </div>
-        </div>
+          </>
+        )}
 
         <hr className="border-slate-100" />
 

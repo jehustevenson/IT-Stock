@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { toast } from 'sonner';
 import { Toaster } from 'sonner';
 import { Plus, Search, Filter, Download } from 'lucide-react';
-import { Asset, AssetStatus, AssetCategory } from '@/lib/mockData';
+import { Asset, AssetStatus, AssetCategory, SchoolSection, SCHOOLS } from '@/lib/mockData';
 import { useAppData } from '@/lib/AppDataContext';
 import AssetTable from './AssetTable';
 import AssetFormModal from './AssetFormModal';
@@ -21,6 +21,7 @@ export default function InventoryClient() {
 
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('All');
+  const [filterSchool, setFilterSchool] = useState<string>('All');
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [sortKey, setSortKey] = useState<keyof Asset>('assetTag');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -47,6 +48,7 @@ export default function InventoryClient() {
       );
     }
     if (filterCategory !== 'All') result = result.filter((a) => a.category === filterCategory);
+    if (filterSchool !== 'All') result = result.filter((a) => a.school === filterSchool);
     if (filterStatus !== 'All') result = result.filter((a) => a.status === filterStatus);
 
     result = [...result].sort((a, b) => {
@@ -56,7 +58,7 @@ export default function InventoryClient() {
     });
 
     return result;
-  }, [assets, search, filterCategory, filterStatus, sortKey, sortDir]);
+  }, [assets, search, filterCategory, filterSchool, filterStatus, sortKey, sortDir]);
 
   function handleSort(key: keyof Asset) {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -110,6 +112,14 @@ export default function InventoryClient() {
     return counts;
   }, [assets]);
 
+  const schoolStats = useMemo(() => {
+    const counts: Record<string, number> = { All: assets.length };
+    for (const a of assets) {
+      if (a.school) counts[a.school] = (counts[a.school] ?? 0) + 1;
+    }
+    return counts;
+  }, [assets]);
+
   return (
     <>
       <Toaster position="bottom-right" richColors />
@@ -135,23 +145,49 @@ export default function InventoryClient() {
         </div>
 
         {/* Category Filter Chips */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {(['All', ...CATEGORIES] as const).map((cat) => (
-            <button
-              key={`chip-${cat}`}
-              onClick={() => setFilterCategory(cat)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-150 ${
-                filterCategory === cat
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'
-              }`}
-            >
-              {cat}
-              <span className={`tabular-nums ${filterCategory === cat ? 'text-blue-100' : 'text-slate-400'}`}>
-                {categoryStats[cat] ?? 0}
-              </span>
-            </button>
-          ))}
+        <div>
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">By Category</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            {(['All', ...CATEGORIES] as const).map((cat) => (
+              <button
+                key={`chip-${cat}`}
+                onClick={() => setFilterCategory(cat)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-150 ${
+                  filterCategory === cat
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                {cat}
+                <span className={`tabular-nums ${filterCategory === cat ? 'text-blue-100' : 'text-slate-400'}`}>
+                  {categoryStats[cat] ?? 0}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* School Filter Chips */}
+        <div>
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">By School</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            {(['All', ...SCHOOLS] as const).map((school) => (
+              <button
+                key={`school-chip-${school}`}
+                onClick={() => setFilterSchool(school)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-150 ${
+                  filterSchool === school
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                {school}
+                <span className={`tabular-nums ${filterSchool === school ? 'text-emerald-100' : 'text-slate-400'}`}>
+                  {schoolStats[school] ?? 0}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Search + Status Filter Bar */}
