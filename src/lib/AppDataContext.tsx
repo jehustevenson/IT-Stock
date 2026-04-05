@@ -125,7 +125,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           }),
         });
         if (aRes.ok) {
-          setAssignments((prev) => [rowToAssignment(await aRes.json()), ...prev]);
+          const newAssignment = rowToAssignment(await aRes.json());
+          setAssignments((prev) => [newAssignment, ...prev]);
         }
       } catch (err) {
         console.error('Failed to create paired assignment:', err);
@@ -147,7 +148,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       throw new Error(err.error ?? 'Failed to update asset');
     }
 
-    setAssets((prev) => prev.map((a) => (a.id === updated.id ? rowToAsset(await res.json()) : a)));
+    const updatedAsset = rowToAsset(await res.json());
+    setAssets((prev) => prev.map((a) => (a.id === updated.id ? updatedAsset : a)));
   }, []);
 
   const deleteAsset = useCallback(async (id: string): Promise<void> => {
@@ -212,7 +214,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       throw new Error(err.error ?? 'Failed to create assignment');
     }
 
-    setAssignments((prev) => [rowToAssignment(await res.json()), ...prev]);
+    const newAssignment = rowToAssignment(await res.json());
+    setAssignments((prev) => [newAssignment, ...prev]);
 
     // Sync asset status locally
     setAssets((prev) =>
