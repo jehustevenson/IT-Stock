@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { checkAuth, hasPermission } from '@/lib/auth-utils';
 
 export async function GET(request: NextRequest) {
+  // Check authorization - viewer can read
+  const authResult = await checkAuth('viewer');
+  if (authResult instanceof NextResponse) return authResult;
+
   const supabase = await createClient();
 
   const { searchParams } = new URL(request.url);
@@ -28,11 +33,21 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Check authorization - operator can create
+  const authResult = await checkAuth('operator');
+  if (authResult instanceof NextResponse) return authResult;
+  const { user, role } = authResult;
+
+  // Additional check - make sure user has permission
+  if (!hasPermission(role, 'assignment:create')) {
+    return NextResponse.json(
+      { error: 'You do not have permission to create assignments' },
+      { status: 403 }
+    );
+  }
+
   const supabase = await createClient();
   const body = await request.json();
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   // Find asset UUID from tag
   const { data: asset, error: assetErr } = await supabase
@@ -81,14 +96,38 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Validate dates
-  if (body.expectedReturn && body.dateAssigned) {
-    if (new Date(body.expectedReturn) <= new Date(body.dateAssigned)) {
-      return NextResponse.json(
-        { error: 'Expected return date must be after the assignment date.' },
-        { status: 400 }
-      );
-    }
+  // FIX #7: Validate date range
+  if (!body.dateAssigned || !body.expectedReturn) {
+    return NextResponse.json(
+      { error: 'dateAssigned and expectedReturn are required' },
+      { status: 400 }
+    );
+  }
+
+  const dateAssigned = new Date(body.dateAssigned);
+  const expectedReturn = new Date(body.expectedReturn);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Normalize to midnight
+
+  // Validate: expectedReturn must be after dateAssigned
+  if (expectedReturn <= dateAssigned) {
+    return NextResponse.json(
+      { error: 'Expected return date must be after the assignment date.' },
+      { status: 400 }
+    );
+  }
+
+  // FIX #7 NEW: Validate expectedReturn must be today or in the future
+  const expectedReturnAtMidnight = new Date(body.expectedReturn);
+  expectedReturnAtMidnight.setHours(0, 0, 0, 0);
+
+  if (expectedReturnAtMidnight < today) {
+    return NextResponse.json(
+      {
+        error: `Expected return date must be today or in the future. You selected ${body.expectedReturn}, which is in the past.`,
+      },
+      { status: 400 }
+    );
   }
 
   const { data, error } = await supabase
@@ -127,7 +166,7 @@ export async function POST(request: NextRequest) {
     asset_tag:    body.assetTag,
     asset_name:   body.assetName,
     performed_by: user.email ?? 'Admin (IT)',
-    details:      `Assigned to ${body.staffName} (${body.staffId}) — ${body.department}`,
+    details:      `Assigned to ${body.staffName} (${body.staffId}) — ${body.department} — Return by ${body.expectedReturn}`,
   });
 
   return NextResponse.json(data, { status: 201 });

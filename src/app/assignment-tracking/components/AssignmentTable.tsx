@@ -11,8 +11,12 @@ interface AssignmentTableProps {
 }
 
 function daysOverdue(expectedReturn: string): number {
-  const today = new Date('2026-04-01');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Set to midnight for accurate comparison
+  
   const ret = new Date(expectedReturn);
+  ret.setHours(0, 0, 0, 0); // Set to midnight for accurate comparison
+  
   const diff = Math.floor((today.getTime() - ret.getTime()) / (1000 * 60 * 60 * 24));
   return diff > 0 ? diff : 0;
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { checkAuth } from '@/lib/auth-utils';
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -27,7 +28,10 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(data);
 }
 
+
 export async function POST(request: NextRequest) {
+  const authResult = await checkAuth('operator');
+  if (authResult instanceof NextResponse) return authResult;
   const supabase = await createClient();
   const body = await request.json();
 

@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/mark-overdue",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/validate-consistency",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { checkAuth } from '@/lib/auth-utils';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -86,7 +87,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   return NextResponse.json(data);
 }
 
+
+
 export async function DELETE(_req: NextRequest, { params }: Params) {
+  const authResult = await checkAuth('manager');
+  if (authResult instanceof NextResponse) return authResult;
   const supabase = await createClient();
   const { id } = await params;
 

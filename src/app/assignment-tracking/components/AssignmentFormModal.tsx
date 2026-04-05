@@ -213,23 +213,19 @@ export default function AssignmentFormModal({
               <label className="form-label">
                 Date Assigned <span className="text-red-500">*</span>
               </label>
-              <input
-                type="date"
-                {...register('dateAssigned', { required: 'Date assigned is required' })}
-                className="form-input"
-              />
-              {errors.dateAssigned && <p className="form-error">{errors.dateAssigned.message}</p>}
-            </div>
-            <div>
-              <label className="form-label">
-                Expected Return Date <span className="text-red-500">*</span>
-              </label>
-              <p className="form-helper -mt-0.5 mb-1">Used for overdue tracking</p>
-              <input
-                type="date"
-                {...register('expectedReturn', { required: 'Expected return date is required' })}
-                className="form-input"
-              />
+              // In the form, restrict date input:
+<input
+  type="date"
+  {...register('expectedReturn', {
+    required: 'Expected return date is required',
+    validate: (value) => {
+      const today = new Date().toISOString().split('T')[0];
+      return value >= today || 'Return date must be today or later';
+    }
+  })}
+  min={new Date().toISOString().split('T')[0]}  // HTML constraint
+  className="form-input"
+/>
               {errors.expectedReturn && <p className="form-error">{errors.expectedReturn.message}</p>}
             </div>
           </div>
