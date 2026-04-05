@@ -81,11 +81,15 @@ export default function AddDevicePage() {
     }
   }, [watchedSchool, watchedCategory, setValue]);
 
+  // FIX: await addAsset so we get the Asset back, not a Promise
   const onFormSubmit = async (data: FormData) => {
-    await new Promise((r) => setTimeout(r, 500));
-    const newAsset = addAsset(data);
-    setAddedTag(newAsset.assetTag);
-    setSubmitted(true);
+    try {
+      const newAsset = await addAsset(data);
+      setAddedTag(newAsset.assetTag);
+      setSubmitted(true);
+    } catch (err) {
+      console.error('Failed to add asset:', err);
+    }
   };
 
   function handleAddAnother() {

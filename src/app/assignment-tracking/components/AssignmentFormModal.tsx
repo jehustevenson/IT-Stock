@@ -35,7 +35,6 @@ export default function AssignmentFormModal({
     handleSubmit,
     reset,
     setValue,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     defaultValues: {
@@ -66,12 +65,12 @@ export default function AssignmentFormModal({
     }
   }
 
-  const watchedTag = watch('assetTag');
-
   const onFormSubmit = async (data: FormData) => {
     await new Promise((r) => setTimeout(r, 400));
     onSubmit({ ...data, status: 'Active' });
   };
+
+  const today = new Date().toISOString().split('T')[0];
 
   return (
     <Modal
@@ -123,9 +122,8 @@ export default function AssignmentFormModal({
               <input
                 {...register('assetTag', {
                   required: 'Asset tag is required',
-                  pattern: { value: /^IT-[A-Z]{2}-\d{4}$/, message: 'Format must be IT-XX-0000' },
                 })}
-                placeholder="IT-LT-0042"
+                placeholder="e.g. INF-LT-0042"
                 className="form-input font-mono"
               />
               {errors.assetTag && <p className="form-error">{errors.assetTag.message}</p>}
@@ -209,23 +207,36 @@ export default function AssignmentFormModal({
             Assignment Dates
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* FIX: restored dateAssigned field */}
             <div>
               <label className="form-label">
                 Date Assigned <span className="text-red-500">*</span>
               </label>
-              // In the form, restrict date input:
-<input
-  type="date"
-  {...register('expectedReturn', {
-    required: 'Expected return date is required',
-    validate: (value) => {
-      const today = new Date().toISOString().split('T')[0];
-      return value >= today || 'Return date must be today or later';
-    }
-  })}
-  min={new Date().toISOString().split('T')[0]}  // HTML constraint
-  className="form-input"
-/>
+              <input
+                type="date"
+                {...register('dateAssigned', { required: 'Assignment date is required' })}
+                max={today}
+                className="form-input"
+              />
+              {errors.dateAssigned && <p className="form-error">{errors.dateAssigned.message}</p>}
+            </div>
+            {/* FIX: restored expectedReturn as its own field */}
+            <div>
+              <label className="form-label">
+                Expected Return <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="date"
+                {...register('expectedReturn', {
+                  required: 'Expected return date is required',
+                  validate: (value) => {
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    return value >= todayStr || 'Return date must be today or later';
+                  },
+                })}
+                min={today}
+                className="form-input"
+              />
               {errors.expectedReturn && <p className="form-error">{errors.expectedReturn.message}</p>}
             </div>
           </div>

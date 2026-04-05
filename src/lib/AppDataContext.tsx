@@ -152,33 +152,33 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setAssets((prev) => prev.map((a) => (a.id === updated.id ? updatedAsset : a)));
   }, []);
 
-const deleteAssets = useCallback(async (ids: Set<string>): Promise<void> => {
-  const today = new Date().toISOString().split('T')[0];
-  
-  await Promise.all([...ids].map((id) => fetch(`/api/assets/${id}`, { method: 'DELETE' })));
+  const deleteAsset = useCallback(async (id: string): Promise<void> => {
+    const res = await fetch(`/api/assets/${id}`, { method: 'DELETE' });
 
-  setAssets((prev) => prev.filter((a) => !ids.has(a.id)));
-  
-  setAssignments((prev) =>
-    prev.map((asgn) => {
-      // Only update Active/Overdue assignments
-      if (ids.has(asgn.assetId) && (asgn.status === 'Active' || asgn.status === 'Overdue')) {
-        return { ...asgn, status: 'Returned' as const, returnedDate: today };
-      }
-      // Preserve original returnedDate for already Returned assignments
-      return asgn;
-    })
-  );
-}, []);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error ?? 'Failed to delete asset');
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    setAssets((prev) => prev.filter((a) => a.id !== id));
+    setAssignments((prev) =>
+      prev.map((asgn) =>
+        asgn.assetId === id && (asgn.status === 'Active' || asgn.status === 'Overdue')
+          ? { ...asgn, status: 'Returned' as const, returnedDate: today }
+          : asgn
+      )
+    );
+  }, []);
 
   const deleteAssets = useCallback(async (ids: Set<string>): Promise<void> => {
     await Promise.all([...ids].map((id) => fetch(`/api/assets/${id}`, { method: 'DELETE' })));
 
-    setAssets((prev) => prev.filter((a) => !ids.has(a.id)));
     const today = new Date().toISOString().split('T')[0];
+    setAssets((prev) => prev.filter((a) => !ids.has(a.id)));
     setAssignments((prev) =>
       prev.map((asgn) =>
-        ids.has(asgn.assetId) && asgn.status !== 'Returned'
+        ids.has(asgn.assetId) && (asgn.status === 'Active' || asgn.status === 'Overdue')
           ? { ...asgn, status: 'Returned' as const, returnedDate: today }
           : asgn
       )

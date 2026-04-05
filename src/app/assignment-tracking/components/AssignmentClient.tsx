@@ -1,236 +1,373 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { toast } from 'sonner';
-import { Toaster } from 'sonner';
-import { Plus, Search, Filter, AlertTriangle, UserCheck, RotateCcw, Clock } from 'lucide-react';
-import { Assignment } from '@/lib/mockData';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
+import AppLayout from '@/components/AppLayout';
+import { Asset, AssetCategory, AssetStatus, SchoolSection, SCHOOLS } from '@/lib/mockData';
 import { useAppData } from '@/lib/AppDataContext';
-import AssignmentTable from './AssignmentTable';
-import AssignmentFormModal from './AssignmentFormModal';
-import ReturnModal from './ReturnModal';
-import { markOverdueAssignments } from '@/app/actions/overdue';
+import { ArrowLeft, Plus, Loader2, CheckCircle2, RefreshCw } from 'lucide-react';
+import Link from 'next/link';
 
+type FormData = Omit<Asset, 'id'>;
 
-const DEPARTMENTS = ['All', 'Engineering', 'Design', 'Finance', 'Administration', 'IT Infrastructure', 'Sales'];
-const STATUSES = ['All', 'Active', 'Overdue', 'Returned'];
+const CATEGORIES: AssetCategory[] = [
+  'Laptop', 'Desktop', 'Monitor', 'Printer', 'Networking', 'Accessory', 'Server', 'Phone',
+];
+const STATUSES: AssetStatus[] = ['Available', 'Assigned', 'Faulty', 'Retired'];
 
-export default function AssignmentClient() {
-  const { assignments, assets, loading, addAssignment, returnAssignment } = useAppData();
+const SCHOOL_PREFIX: Record<SchoolSection, string> = {
+  'Infant School':    'INF',
+  'Junior School':    'JUN',
+  'Secondary School': 'SEC',
+};
 
-  const [search, setSearch]           = useState('');
-  const [filterDept, setFilterDept]   = useState('All');
-  const [filterStatus, setFilterStatus] = useState('All');
+const CATEGORY_CODE: Record<AssetCategory, string> = {
+  Laptop:     'LT',
+  Desktop:    'DT',
+  Monitor:    'MN',
+  Printer:    'PR',
+  Networking: 'NW',
+  Accessory:  'AC',
+  Server:     'SV',
+  Phone:      'PH',
+};
 
-  const [assignModalOpen, setAssignModalOpen] = useState(false);
-  const [returnTarget, setReturnTarget]       = useState<Assignment | null>(null);
+const SCHOOL_COLORS: Record<SchoolSection, string> = {
+  'Infant School':    'peer-checked:bg-pink-600 peer-checked:border-pink-600 peer-checked:text-white',
+  'Junior School':    'peer-checked:bg-violet-600 peer-checked:border-violet-600 peer-checked:text-white',
+  'Secondary School': 'peer-checked:bg-teal-600 peer-checked:border-teal-600 peer-checked:text-white',
+};
 
-  const filtered = useMemo(() => {
-    let result = assignments;
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (a) =>
-          a.staffName.toLowerCase().includes(q) ||
-          a.staffId.toLowerCase().includes(q) ||
-          a.assetTag.toLowerCase().includes(q) ||
-          a.assetName.toLowerCase().includes(q) ||
-          a.department.toLowerCase().includes(q)
-      );
+function generateTag(school: SchoolSection, category: AssetCategory): string {
+  const prefix = SCHOOL_PREFIX[school];
+  const code = CATEGORY_CODE[category];
+  const num = String(Math.floor(1000 + Math.random() * 9000));
+  return `${prefix}-${code}-${num}`;
+}
+
+export default function AddDevicePage() {
+  const { addAsset } = useAppData();
+  const [submitted, setSubmitted] = useState(false);
+  const [addedTag, setAddedTag] = useState('');
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    control,
+    formState: { errors, isSubmitting },
+  } = useForm<FormData>({
+    defaultValues: {
+      status: 'Available',
+      category: 'Laptop',
+    },
+  });
+
+  const watchedSchool   = useWatch({ control, name: 'school' });
+  const watchedCategory = useWatch({ control, name: 'category' });
+  const watchedStatus   = useWatch({ control, name: 'status' });
+  const showAssignment  = watchedStatus === 'Assigned';
+
+  const regenerateTag = useCallback(() => {
+    if (watchedSchool && watchedCategory) {
+      setValue('assetTag', generateTag(watchedSchool as SchoolSection, watchedCategory as AssetCategory), { shouldValidate: true });
     }
-    if (filterDept !== 'All')   result = result.filter((a) => a.department === filterDept);
-    if (filterStatus !== 'All') result = result.filter((a) => a.status === filterStatus);
-    return result;
-  }, [assignments, search, filterDept, filterStatus]);
+  }, [watchedSchool, watchedCategory, setValue]);
 
-  const stats = useMemo(() => ({
-    total:    assignments.length,
-    active:   assignments.filter((a) => a.status === 'Active').length,
-    overdue:  assignments.filter((a) => a.status === 'Overdue').length,
-    returned: assignments.filter((a) => a.status === 'Returned').length,
-  }), [assignments]);
+  useEffect(() => {
+    if (watchedSchool && watchedCategory) {
+      setValue('assetTag', generateTag(watchedSchool as SchoolSection, watchedCategory as AssetCategory), { shouldValidate: true });
+    }
+  }, [watchedSchool, watchedCategory, setValue]);
 
-  const availableAssets = useMemo(
-    () => assets.filter((a) => a.status === 'Available'),
-    [assets]
-  );
-
-  async function handleNewAssignment(data: Omit<Assignment, 'id'>) {
+  // FIX: await addAsset so we get the Asset back, not a Promise
+  const onFormSubmit = async (data: FormData) => {
     try {
-      await addAssignment(data);
-      setAssignModalOpen(false);
-      toast.success(`${data.assetTag} assigned to ${data.staffName}`);
+      const newAsset = await addAsset(data);
+      setAddedTag(newAsset.assetTag);
+      setSubmitted(true);
     } catch (err) {
-      toast.error((err as Error).message ?? 'Failed to create assignment');
+      console.error('Failed to add asset:', err);
     }
-  }
+  };
 
-  function handleReturn(id: string, returnedDate: string) {
-    returnAssignment(id, returnedDate);
-    setReturnTarget(null);
-    toast.success('Asset checked in — inventory updated to Available');
+  function handleAddAnother() {
+    reset({ status: 'Available', category: 'Laptop' });
+    setSubmitted(false);
+    setAddedTag('');
   }
 
   return (
-    <>
-      <Toaster position="bottom-right" richColors />
-      <div className="px-6 lg:px-8 xl:px-10 py-6 max-w-screen-2xl mx-auto space-y-5">
-        {/* Header */}
-        <div className="flex items-start justify-between">
+    <AppLayout>
+      <div className="px-6 lg:px-8 xl:px-10 py-6 max-w-3xl mx-auto space-y-6">
+        {/* Page Header */}
+        <div className="flex items-center gap-3">
+          <Link href="/inventory-management">
+            <span className="icon-btn" title="Back to Inventory">
+              <ArrowLeft size={18} />
+            </span>
+          </Link>
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Assignment Tracking</h1>
-            <p className="text-sm text-slate-500 mt-1">
-              {loading ? 'Loading…' : 'Manage equipment assignments and track returns'}
-            </p>
-          </div>
-          <button onClick={() => setAssignModalOpen(true)} className="btn-primary text-xs gap-1.5">
-            <Plus size={14} />
-            New Assignment
-          </button>
-        </div>
-
-        {/* Stats Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="card px-4 py-3 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
-              <UserCheck size={15} className="text-blue-600" />
-            </div>
-            <div>
-              <p className="text-xl font-bold text-slate-900 tabular-nums">{stats.total}</p>
-              <p className="text-xs text-slate-500">Total</p>
-            </div>
-          </div>
-          <div className="card px-4 py-3 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
-              <UserCheck size={15} className="text-emerald-600" />
-            </div>
-            <div>
-              <p className="text-xl font-bold text-slate-900 tabular-nums">{stats.active}</p>
-              <p className="text-xs text-slate-500">Active</p>
-            </div>
-          </div>
-          <div className="card px-4 py-3 flex items-center gap-3 border-amber-100 bg-amber-50/30">
-            <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0">
-              <AlertTriangle size={15} className="text-amber-600" />
-            </div>
-            <div>
-              <p className="text-xl font-bold text-amber-700 tabular-nums">{stats.overdue}</p>
-              <p className="text-xs text-amber-600">Overdue</p>
-            </div>
-          </div>
-          <div className="card px-4 py-3 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
-              <RotateCcw size={15} className="text-slate-500" />
-            </div>
-            <div>
-              <p className="text-xl font-bold text-slate-900 tabular-nums">{stats.returned}</p>
-              <p className="text-xs text-slate-500">Returned</p>
-            </div>
+            <h1 className="text-2xl font-semibold text-slate-900">Add New Device</h1>
+            <p className="text-sm text-slate-500 mt-0.5">Register a new IT asset to the inventory</p>
           </div>
         </div>
 
-        {/* Overdue Banner */}
-        {stats.overdue > 0 && (
-          <div className="flex items-center gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg">
-            <Clock size={15} className="text-amber-600 flex-shrink-0" />
-            <p className="text-sm text-amber-800">
-              <span className="font-semibold">{stats.overdue} assignment{stats.overdue > 1 ? 's are' : ' is'} overdue.</span>{' '}
-              Contact the assigned staff members to arrange equipment return.
-            </p>
-          </div>
-        )}
-
-        {/* Available hint */}
-        {availableAssets.length > 0 && (
-          <div className="flex items-center gap-3 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-            <UserCheck size={15} className="text-emerald-600 flex-shrink-0" />
-            <p className="text-sm text-emerald-800">
-              <span className="font-semibold">{availableAssets.length} asset{availableAssets.length > 1 ? 's are' : ' is'} available</span>{' '}
-              and ready to be assigned.{' '}
-              <button
-                onClick={() => setAssignModalOpen(true)}
-                className="underline font-semibold hover:text-emerald-900 transition-colors"
-              >
-                Create assignment →
+        {/* Success State */}
+        {submitted ? (
+          <div className="card p-8 flex flex-col items-center text-center space-y-4">
+            <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
+              <CheckCircle2 size={28} className="text-green-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Device Added Successfully</h2>
+              <p className="text-sm text-slate-500 mt-1">
+                Asset{' '}
+                <span className="font-mono font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+                  {addedTag}
+                </span>{' '}
+                has been registered to the inventory.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 pt-2">
+              <button onClick={handleAddAnother} className="btn-primary gap-1.5">
+                <Plus size={15} />
+                Add Another Device
               </button>
-            </p>
-          </div>
-        )}
-
-        {/* Filters */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by staff, asset, department…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="form-input pl-9 text-xs h-9"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Filter size={14} className="text-slate-400" />
-            <span className="text-xs text-slate-500">Dept:</span>
-            <select
-              value={filterDept}
-              onChange={(e) => setFilterDept(e.target.value)}
-              className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              {DEPARTMENTS.map((d) => (
-                <option key={`dept-${d}`} value={d}>{d}</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex items-center gap-1">
-            {STATUSES.map((s) => (
-              <button
-                key={`asgn-status-${s}`}
-                onClick={() => setFilterStatus(s)}
-                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all duration-150 ${
-                  filterStatus === s ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-100'
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-          <span className="ml-auto text-xs text-slate-400 tabular-nums">
-            {filtered.length} of {assignments.length} assignments
-          </span>
-        </div>
-
-        {/* Loading skeleton */}
-        {loading ? (
-          <div className="card p-12 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
-              <svg className="animate-spin w-6 h-6 text-blue-500" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              <p className="text-sm text-slate-500">Loading assignments…</p>
+              <Link href="/inventory-management">
+                <span className="btn-secondary">View Inventory</span>
+              </Link>
+              <Link href="/assignment-tracking">
+                <span className="btn-secondary">Go to Assignments</span>
+              </Link>
             </div>
           </div>
         ) : (
-          <AssignmentTable assignments={filtered} onReturn={setReturnTarget} />
+          <form onSubmit={handleSubmit(onFormSubmit)} className="card p-6 space-y-6">
+
+            {/* Device Details */}
+            <div>
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+                Device Details
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="form-label">
+                    Item Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    {...register('name', {
+                      required: 'Item name is required',
+                      minLength: { value: 3, message: 'Name must be at least 3 characters' },
+                    })}
+                    placeholder="e.g. Dell Latitude 5540"
+                    className="form-input"
+                  />
+                  {errors.name && <p className="form-error">{errors.name.message}</p>}
+                </div>
+                <div>
+                  <label className="form-label">Category <span className="text-red-500">*</span></label>
+                  <select {...register('category', { required: true })} className="form-input">
+                    {CATEGORIES.map((c) => (
+                      <option key={`cat-${c}`} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label">Status <span className="text-red-500">*</span></label>
+                  <select {...register('status', { required: true })} className="form-input">
+                    {STATUSES.map((s) => (
+                      <option key={`status-${s}`} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label">Purchase Date <span className="text-red-500">*</span></label>
+                  <input
+                    type="date"
+                    {...register('purchaseDate', { required: 'Purchase date is required' })}
+                    className="form-input"
+                  />
+                  {errors.purchaseDate && <p className="form-error">{errors.purchaseDate.message}</p>}
+                </div>
+                <div>
+                  <label className="form-label">Location <span className="text-red-500">*</span></label>
+                  <p className="form-helper -mt-0.5 mb-1">Building, floor, or room</p>
+                  <input
+                    {...register('location', { required: 'Location is required' })}
+                    placeholder="e.g. Block A — Room 12"
+                    className="form-input"
+                  />
+                  {errors.location && <p className="form-error">{errors.location.message}</p>}
+                </div>
+              </div>
+            </div>
+
+            <hr className="border-slate-100" />
+
+            {/* School Section */}
+            <div>
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+                School Section
+              </h3>
+              <label className="form-label">School <span className="text-red-500">*</span></label>
+              <p className="form-helper -mt-0.5 mb-2">Which school section does this asset belong to?</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                {SCHOOLS.map((school) => (
+                  <label key={school} className="relative cursor-pointer">
+                    <input
+                      type="radio"
+                      value={school}
+                      {...register('school', { required: 'Please select a school section' })}
+                      className="peer sr-only"
+                    />
+                    <span
+                      className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-150
+                        border-slate-200 text-slate-600 bg-white hover:border-slate-300
+                        ${SCHOOL_COLORS[school]}`}
+                    >
+                      {school}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {errors.school && <p className="form-error mt-1">{errors.school.message}</p>}
+            </div>
+
+            <hr className="border-slate-100" />
+
+            {/* Asset Identification */}
+            <div>
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+                Asset Identification
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label">
+                    Asset Tag / Unique ID <span className="text-red-500">*</span>
+                  </label>
+                  <p className="form-helper -mt-0.5 mb-1">
+                    Auto-generated from school &amp; category — you can edit if needed
+                  </p>
+                  <div className="relative">
+                    <input
+                      {...register('assetTag', {
+                        required: 'Asset tag is required',
+                        pattern: {
+                          value: /^(INF|JUN|SEC)-[A-Z]{2}-\d{4}$/,
+                          message: 'Format must be INF/JUN/SEC-XX-0000',
+                        },
+                      })}
+                      placeholder="Select school & category above"
+                      className="form-input font-mono pr-9"
+                    />
+                    {watchedSchool && watchedCategory && (
+                      <button
+                        type="button"
+                        onClick={regenerateTag}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 icon-btn"
+                        title="Generate a new ID"
+                      >
+                        <RefreshCw size={13} />
+                      </button>
+                    )}
+                  </div>
+                  {errors.assetTag && <p className="form-error">{errors.assetTag.message}</p>}
+                </div>
+                <div>
+                  <label className="form-label">
+                    Serial Number <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    {...register('serialNumber', { required: 'Serial number is required' })}
+                    placeholder="e.g. DLAT5540-2024-0045"
+                    className="form-input font-mono"
+                  />
+                  {errors.serialNumber && <p className="form-error">{errors.serialNumber.message}</p>}
+                </div>
+              </div>
+            </div>
+
+            {/* Assignment Details — only visible when status is Assigned */}
+            {showAssignment && (
+              <>
+                <hr className="border-slate-100" />
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                    Assignment Details
+                  </h3>
+                  <p className="text-xs text-slate-400 mb-3">
+                    Enter the staff member this asset is being assigned to.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="form-label">Staff Name</label>
+                      <input
+                        {...register('assignedTo')}
+                        placeholder="e.g. Marcus Osei"
+                        className="form-input"
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">Staff ID</label>
+                      <input
+                        {...register('assignedToId')}
+                        placeholder="e.g. EMP-1042"
+                        className="form-input font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">Department</label>
+                      <input
+                        {...register('department')}
+                        placeholder="e.g. Year 3"
+                        className="form-input"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            <hr className="border-slate-100" />
+
+            {/* Notes */}
+            <div>
+              <label className="form-label">Notes</label>
+              <p className="form-helper -mt-0.5 mb-1">
+                Any relevant notes — repair status, condition, special instructions
+              </p>
+              <textarea
+                {...register('notes')}
+                rows={3}
+                placeholder="e.g. Battery replaced in Jan 2026. Minor cosmetic scratches on lid."
+                className="form-input resize-none"
+              />
+            </div>
+
+            {/* Footer Actions */}
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+              <Link href="/inventory-management">
+                <span className="btn-secondary">Cancel</span>
+              </Link>
+              <button type="submit" disabled={isSubmitting} className="btn-primary gap-2">
+                {isSubmitting ? (
+                  <>
+                    <Loader2 size={15} className="animate-spin" />
+                    Saving…
+                  </>
+                ) : (
+                  <>
+                    <Plus size={15} />
+                    Add Device
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
         )}
       </div>
-
-      {/* Modals */}
-      <AssignmentFormModal
-        open={assignModalOpen}
-        onClose={() => setAssignModalOpen(false)}
-        onSubmit={handleNewAssignment}
-        availableAssets={availableAssets}
-      />
-      {returnTarget && (
-        <ReturnModal
-          open={!!returnTarget}
-          onClose={() => setReturnTarget(null)}
-          assignment={returnTarget}
-          onConfirm={handleReturn}
-        />
-      )}
-    </>
+    </AppLayout>
   );
 }
