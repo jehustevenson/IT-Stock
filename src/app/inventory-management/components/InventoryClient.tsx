@@ -1,38 +1,37 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { toast } from 'sonner';
-import { Toaster } from 'sonner';
-import { Plus, Search, Filter, Download } from 'lucide-react';
-import { Asset, AssetStatus, AssetCategory, SchoolSection, SCHOOLS } from '@/lib/mockData';
+import { toast, Toaster } from 'sonner';
+import { Plus, Search, Filter, Download, AlertTriangle } from 'lucide-react';
+import { Asset, AssetStatus, AssetCategory, SCHOOLS } from '@/lib/supabase/types';
+import { CATEGORIES, exportAssetsCSV } from '@/lib/assetUtils';
 import { useAppData } from '@/lib/AppDataContext';
 import AssetTable from './AssetTable';
 import AssetFormModal from './AssetFormModal';
 import QRCodeModal from './QRCodeModal';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 
-const CATEGORIES: AssetCategory[] = [
-  'Laptop', 'Desktop', 'Monitor', 'Printer', 'Networking', 'Accessory', 'Server', 'Phone',
-];
 const STATUSES: AssetStatus[] = ['Available', 'Assigned', 'Faulty', 'Retired'];
 
 export default function InventoryClient() {
-  const { assets, loading, addAsset, updateAsset, deleteAsset, deleteAssets, changeAssetStatus } = useAppData();
+  const {
+    assets, loading, error,
+    addAsset, updateAsset, deleteAsset, deleteAssets, changeAssetStatus,
+  } = useAppData();
 
-  const [search, setSearch]               = useState('');
-  const [filterCategory, setFilterCategory] = useState<string>('All');
-  const [filterSchool, setFilterSchool]   = useState<string>('All');
-  const [filterStatus, setFilterStatus]   = useState<string>('All');
-  const [sortKey, setSortKey]             = useState<keyof Asset>('assetTag');
-  const [sortDir, setSortDir]             = useState<'asc' | 'desc'>('asc');
-  const [selectedIds, setSelectedIds]     = useState<Set<string>>(new Set());
-
-  const [addModalOpen, setAddModalOpen]   = useState(false);
-  const [editAsset, setEditAsset]         = useState<Asset | null>(null);
-  const [qrAsset, setQrAsset]             = useState<Asset | null>(null);
-  const [deleteId, setDeleteId]           = useState<string | null>(null);
-  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [search,           setSearch]           = useState('');
+  const [filterCategory,   setFilterCategory]   = useState<string>('All');
+  const [filterSchool,     setFilterSchool]     = useState<string>('All');
+  const [filterStatus,     setFilterStatus]     = useState<string>('All');
+  const [sortKey,          setSortKey]          = useState<keyof Asset>('assetTag');
+  const [sortDir,          setSortDir]          = useState<'asc' | 'desc'>('asc');
+  const [selectedIds,      setSelectedIds]      = useState<Set<string>>(new Set());
+  const [addModalOpen,     setAddModalOpen]     = useState(false);
+  const [editAsset,        setEditAsset]        = useState<Asset | null>(null);
+  const [qrAsset,          setQrAsset]          = useState<Asset | null>(null);
+  const [deleteId,         setDeleteId]         = useState<string | null>(null);
+  const [bulkDeleteOpen,   setBulkDeleteOpen]   = useState(false);
+  const [deleteLoading,    setDeleteLoading]    = useState(false);
 
   const filtered = useMemo(() => {
     let result = assets;
@@ -40,29 +39,36 @@ export default function InventoryClient() {
       const q = search.toLowerCase();
       result = result.filter(
         (a) =>
-          a.name.toLowerCase().includes(q) ||
-          a.assetTag.toLowerCase().includes(q) ||
+          a.name.toLowerCase().includes(q)         ||
+          a.assetTag.toLowerCase().includes(q)     ||
           a.serialNumber.toLowerCase().includes(q) ||
-          a.location.toLowerCase().includes(q) ||
+          a.location.toLowerCase().includes(q)     ||
           (a.assignedTo?.toLowerCase().includes(q) ?? false)
       );
     }
     if (filterCategory !== 'All') result = result.filter((a) => a.category === filterCategory);
-    if (filterSchool !== 'All')   result = result.filter((a) => a.school === filterSchool);
-    if (filterStatus !== 'All')   result = result.filter((a) => a.status === filterStatus);
+    if (filterSchool   !== 'All') result = result.filter((a) => a.school   === filterSchool);
+    if (filterStatus   !== 'All') result = result.filter((a) => a.status   === filterStatus);
 
-    result = [...result].sort((a, b) => {
+    return [...result].sort((a, b) => {
       const av = (a[sortKey] ?? '') as string;
       const bv = (b[sortKey] ?? '') as string;
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     });
-
-    return result;
   }, [assets, search, filterCategory, filterSchool, filterStatus, sortKey, sortDir]);
 
   function handleSort(key: keyof Asset) {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     else { setSortKey(key); setSortDir('asc'); }
+  }
+
+  function handleExportCSV() {
+    // FIX: was a no-op button — now exports the current filtered view
+    exportAssetsCSV(
+      filtered,
+      `assets-${filterSchool !== 'All' ? filterSchool.replace(/\s+/g, '-').toLowerCase() + '-' : ''}${new Date().toISOString().split('T')[0]}.csv`
+    );
+    toast.success(`Exported ${filtered.length} assets to CSV`);
   }
 
   async function handleAdd(data: Omit<Asset, 'id'>) {
@@ -109,7 +115,11 @@ export default function InventoryClient() {
       setBulkDeleteOpen(false);
       toast.success(`${count} assets removed from inventory`);
     } catch (err) {
+      // FIX: partial failures now surface a meaningful message
       toast.error((err as Error).message ?? 'Failed to delete assets');
+      // Refresh state so UI reflects what actually got deleted
+      setSelectedIds(new Set());
+      setBulkDeleteOpen(false);
     } finally {
       setDeleteLoading(false);
     }
@@ -138,10 +148,29 @@ export default function InventoryClient() {
     return counts;
   }, [assets]);
 
+  // FIX: surface load errors rather than showing empty tables silently
+  if (error) {
+    return (
+      <div className="px-6 lg:px-8 py-6 max-w-screen-2xl mx-auto">
+        <div className="card p-12 flex flex-col items-center justify-center text-center">
+          <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center mb-4">
+            <AlertTriangle size={22} className="text-red-500" />
+          </div>
+          <p className="text-sm font-medium text-slate-800 mb-1">Failed to load inventory</p>
+          <p className="text-xs text-slate-500 mb-4">{error}</p>
+          <button onClick={() => window.location.reload()} className="btn-secondary text-xs">
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <Toaster position="bottom-right" richColors />
       <div className="px-6 lg:px-8 xl:px-10 py-6 max-w-screen-2xl mx-auto space-y-5">
+
         {/* Page Header */}
         <div className="flex items-start justify-between">
           <div>
@@ -151,7 +180,12 @@ export default function InventoryClient() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button className="btn-secondary text-xs gap-1.5">
+            {/* FIX: Export CSV now actually exports */}
+            <button
+              onClick={handleExportCSV}
+              disabled={loading || assets.length === 0}
+              className="btn-secondary text-xs gap-1.5 disabled:opacity-50"
+            >
               <Download size={14} />
               Export CSV
             </button>
@@ -261,7 +295,6 @@ export default function InventoryClient() {
           </div>
         </div>
 
-        {/* Loading skeleton */}
         {loading ? (
           <div className="card p-12 flex items-center justify-center">
             <div className="flex flex-col items-center gap-3">
@@ -316,7 +349,7 @@ export default function InventoryClient() {
         onClose={() => setDeleteId(null)}
         onConfirm={handleDeleteConfirm}
         title="Delete Asset"
-        message="Are you sure you want to remove this asset from inventory? This action cannot be undone and will also remove all associated assignment records."
+        message="Are you sure you want to remove this asset from inventory? This action cannot be undone and will also close all associated assignment records."
         confirmLabel="Delete Asset"
         loading={deleteLoading}
       />

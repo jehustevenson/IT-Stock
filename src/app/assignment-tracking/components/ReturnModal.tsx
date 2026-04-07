@@ -2,49 +2,35 @@
 
 import React, { useState } from 'react';
 import Modal from '@/components/ui/Modal';
-import { Assignment } from '@/lib/mockData';
+import { Assignment } from '@/lib/supabase/types';
 import { RotateCcw, Loader2 } from 'lucide-react';
 import StatusBadge from '@/components/ui/StatusBadge';
 
 interface ReturnModalProps {
-  open: boolean;
-  onClose: () => void;
+  open:      boolean;
+  onClose:   () => void;
   assignment: Assignment;
-  onConfirm: (id: string, returnedDate: string) => void;
+  /** Context now owns the API call — just pass the values up. */
+  onConfirm: (id: string, returnedDate: string, condition: string, notes: string) => Promise<void>;
 }
 
 export default function ReturnModal({ open, onClose, assignment, onConfirm }: ReturnModalProps) {
   const [returnDate, setReturnDate] = useState(new Date().toISOString().split('T')[0]);
-  const [condition, setCondition] = useState<'Good' | 'Damaged' | 'Needs Service'>('Good');
-  const [notes, setNotes] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [condition,  setCondition]  = useState<'Good' | 'Damaged' | 'Needs Service'>('Good');
+  const [notes,      setNotes]      = useState('');
+  const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState('');
 
   async function handleConfirm() {
     if (!returnDate) return;
     setLoading(true);
     setError('');
-
     try {
-      const res = await fetch(`/api/assignments/${assignment.id}/return`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          returnedDate: returnDate,
-          condition,
-          notes: notes.trim() || undefined,
-        }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data.error ?? 'Failed to process return. Please try again.');
-        return;
-      }
-
-      onConfirm(assignment.id, returnDate);
-    } catch {
-      setError('Network error. Please try again.');
+      // FIX: delegate entirely to onConfirm — no direct fetch here.
+      // AppDataContext.returnAssignment() handles the API call and state update.
+      await onConfirm(assignment.id, returnDate, condition, notes.trim());
+    } catch (err) {
+      setError((err as Error).message ?? 'Failed to process return. Please try again.');
     } finally {
       setLoading(false);
     }

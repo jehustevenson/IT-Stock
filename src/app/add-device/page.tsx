@@ -2,53 +2,26 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
+import { toast, Toaster } from 'sonner';
 import AppLayout from '@/components/AppLayout';
-import { Asset, AssetCategory, AssetStatus, SchoolSection, SCHOOLS } from '@/lib/mockData';
+import { Asset, AssetCategory, AssetStatus, SchoolSection, SCHOOLS } from '@/lib/supabase/types';
 import { useAppData } from '@/lib/AppDataContext';
+import {
+  CATEGORIES,
+  SCHOOL_COLORS,
+  generateTag,
+} from '@/lib/assetUtils';
 import { ArrowLeft, Plus, Loader2, CheckCircle2, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 
 type FormData = Omit<Asset, 'id'>;
 
-const CATEGORIES: AssetCategory[] = [
-  'Laptop', 'Desktop', 'Monitor', 'Printer', 'Networking', 'Accessory', 'Server', 'Phone',
-];
 const STATUSES: AssetStatus[] = ['Available', 'Assigned', 'Faulty', 'Retired'];
-
-const SCHOOL_PREFIX: Record<SchoolSection, string> = {
-  'Infant School':    'INF',
-  'Junior School':    'JUN',
-  'Secondary School': 'SEC',
-};
-
-const CATEGORY_CODE: Record<AssetCategory, string> = {
-  Laptop:     'LT',
-  Desktop:    'DT',
-  Monitor:    'MN',
-  Printer:    'PR',
-  Networking: 'NW',
-  Accessory:  'AC',
-  Server:     'SV',
-  Phone:      'PH',
-};
-
-const SCHOOL_COLORS: Record<SchoolSection, string> = {
-  'Infant School':    'peer-checked:bg-pink-600 peer-checked:border-pink-600 peer-checked:text-white',
-  'Junior School':    'peer-checked:bg-violet-600 peer-checked:border-violet-600 peer-checked:text-white',
-  'Secondary School': 'peer-checked:bg-teal-600 peer-checked:border-teal-600 peer-checked:text-white',
-};
-
-function generateTag(school: SchoolSection, category: AssetCategory): string {
-  const prefix = SCHOOL_PREFIX[school];
-  const code = CATEGORY_CODE[category];
-  const num = String(Math.floor(1000 + Math.random() * 9000));
-  return `${prefix}-${code}-${num}`;
-}
 
 export default function AddDevicePage() {
   const { addAsset } = useAppData();
   const [submitted, setSubmitted] = useState(false);
-  const [addedTag, setAddedTag] = useState('');
+  const [addedTag,  setAddedTag]  = useState('');
 
   const {
     register,
@@ -58,10 +31,7 @@ export default function AddDevicePage() {
     control,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
-    defaultValues: {
-      status: 'Available',
-      category: 'Laptop',
-    },
+    defaultValues: { status: 'Available', category: 'Laptop' },
   });
 
   const watchedSchool   = useWatch({ control, name: 'school' });
@@ -71,24 +41,32 @@ export default function AddDevicePage() {
 
   const regenerateTag = useCallback(() => {
     if (watchedSchool && watchedCategory) {
-      setValue('assetTag', generateTag(watchedSchool as SchoolSection, watchedCategory as AssetCategory), { shouldValidate: true });
+      setValue(
+        'assetTag',
+        generateTag(watchedSchool as SchoolSection, watchedCategory as AssetCategory),
+        { shouldValidate: true }
+      );
     }
   }, [watchedSchool, watchedCategory, setValue]);
 
   useEffect(() => {
     if (watchedSchool && watchedCategory) {
-      setValue('assetTag', generateTag(watchedSchool as SchoolSection, watchedCategory as AssetCategory), { shouldValidate: true });
+      setValue(
+        'assetTag',
+        generateTag(watchedSchool as SchoolSection, watchedCategory as AssetCategory),
+        { shouldValidate: true }
+      );
     }
   }, [watchedSchool, watchedCategory, setValue]);
 
-  // FIX: await addAsset so we get the Asset back, not a Promise
   const onFormSubmit = async (data: FormData) => {
     try {
       const newAsset = await addAsset(data);
       setAddedTag(newAsset.assetTag);
       setSubmitted(true);
     } catch (err) {
-      console.error('Failed to add asset:', err);
+      // FIX: was silently console.error — now shows a visible toast
+      toast.error((err as Error).message ?? 'Failed to add device. Please try again.');
     }
   };
 
@@ -100,7 +78,10 @@ export default function AddDevicePage() {
 
   return (
     <AppLayout>
+      {/* FIX: Toaster was missing from this page */}
+      <Toaster position="bottom-right" richColors />
       <div className="px-6 lg:px-8 xl:px-10 py-6 max-w-3xl mx-auto space-y-6">
+
         {/* Page Header */}
         <div className="flex items-center gap-3">
           <Link href="/inventory-management">
@@ -158,7 +139,7 @@ export default function AddDevicePage() {
                   </label>
                   <input
                     {...register('name', {
-                      required: 'Item name is required',
+                      required:  'Item name is required',
                       minLength: { value: 3, message: 'Name must be at least 3 characters' },
                     })}
                     placeholder="e.g. Dell Latitude 5540"
@@ -245,17 +226,17 @@ export default function AddDevicePage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="form-label">
-                    Asset Tag / Unique ID <span className="text-red-500">*</span>
+                    Asset Tag <span className="text-red-500">*</span>
                   </label>
                   <p className="form-helper -mt-0.5 mb-1">
-                    Auto-generated from school &amp; category — you can edit if needed
+                    Auto-generated — edit or regenerate if needed
                   </p>
                   <div className="relative">
                     <input
                       {...register('assetTag', {
                         required: 'Asset tag is required',
                         pattern: {
-                          value: /^(INF|JUN|SEC)-[A-Z]{2}-\d{4}$/,
+                          value:   /^(INF|JUN|SEC)-[A-Z]{2}-\d{4}$/,
                           message: 'Format must be INF/JUN/SEC-XX-0000',
                         },
                       })}
@@ -289,7 +270,7 @@ export default function AddDevicePage() {
               </div>
             </div>
 
-            {/* Assignment Details — only visible when status is Assigned */}
+            {/* Assignment Details */}
             {showAssignment && (
               <>
                 <hr className="border-slate-100" />
@@ -305,7 +286,7 @@ export default function AddDevicePage() {
                       <label className="form-label">Staff Name</label>
                       <input
                         {...register('assignedTo')}
-                        placeholder="e.g. Marcus Osei"
+                        placeholder="e.g. Kwame Mensah"
                         className="form-input"
                       />
                     </div>
@@ -335,18 +316,15 @@ export default function AddDevicePage() {
             {/* Notes */}
             <div>
               <label className="form-label">Notes</label>
-              <p className="form-helper -mt-0.5 mb-1">
-                Any relevant notes — repair status, condition, special instructions
-              </p>
               <textarea
                 {...register('notes')}
                 rows={3}
-                placeholder="e.g. Battery replaced in Jan 2026. Minor cosmetic scratches on lid."
+                placeholder="e.g. Battery replaced Jan 2026. Minor cosmetic scratches on lid."
                 className="form-input resize-none"
               />
             </div>
 
-            {/* Footer Actions */}
+            {/* Footer */}
             <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
               <Link href="/inventory-management">
                 <span className="btn-secondary">Cancel</span>

@@ -16,47 +16,34 @@ import {
   User,
   PlusCircle,
 } from 'lucide-react';
-import Icon from '@/components/ui/AppIcon';
-import { ASSIGNMENTS } from '@/lib/mockData';
 import { createClient } from '@/lib/supabase/client';
 import { signOut } from '@/app/auth/actions';
+import { useAppData } from '@/lib/AppDataContext';
 
-// Compute badge: count of Active + Overdue assignments
-function getAssignmentBadge(): number | null {
-  const count = ASSIGNMENTS.filter(
-    (a) => a.status === 'Active' || a.status === 'Overdue'
-  ).length;
-  return count > 0 ? count : null;
-}
-
-const BASE_NAV_ITEMS = [
+const NAV_ITEMS = [
   {
-    id: 'nav-dashboard',
+    id:   'nav-dashboard',
     label: 'Dashboard',
-    href: '/dashboard',
-    icon: LayoutDashboard,
-    badge: null as number | null,
+    href:  '/dashboard',
+    icon:  LayoutDashboard,
   },
   {
-    id: 'nav-inventory',
+    id:   'nav-inventory',
     label: 'Inventory',
-    href: '/inventory-management',
-    icon: Package,
-    badge: null as number | null,
+    href:  '/inventory-management',
+    icon:  Package,
   },
   {
-    id: 'nav-add-device',
+    id:   'nav-add-device',
     label: 'Add Device',
-    href: '/add-device',
-    icon: PlusCircle,
-    badge: null as number | null,
+    href:  '/add-device',
+    icon:  PlusCircle,
   },
   {
-    id: 'nav-assignments',
+    id:   'nav-assignments',
     label: 'Assignments',
-    href: '/assignment-tracking',
-    icon: ClipboardList,
-    badge: null as number | null,
+    href:  '/assignment-tracking',
+    icon:  ClipboardList,
   },
 ];
 
@@ -64,15 +51,6 @@ const BOTTOM_ITEMS = [
   { id: 'nav-settings', label: 'Settings', href: '#', icon: Settings },
 ];
 
-function getNavItems() {
-  return BASE_NAV_ITEMS.map((item) =>
-    item.id === 'nav-assignments'
-      ? { ...item, badge: getAssignmentBadge() }
-      : item
-  );
-}
-
-/** Returns initials from a display name or email e.g. "Kwame Mensah" → "KM" */
 function getInitials(nameOrEmail: string): string {
   const parts = nameOrEmail.trim().split(/\s+/);
   if (parts.length >= 2) {
@@ -84,9 +62,20 @@ function getInitials(nameOrEmail: string): string {
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
-  const navItems = getNavItems();
 
-  const [displayName, setDisplayName] = useState('IT Admin');
+  // FIX: read live badge count from context instead of empty mock array
+  const { assignments } = useAppData();
+  const assignmentBadge = assignments.filter(
+    (a) => a.status === 'Active' || a.status === 'Overdue'
+  ).length || null;
+
+  const navItems = NAV_ITEMS.map((item) =>
+    item.id === 'nav-assignments'
+      ? { ...item, badge: assignmentBadge }
+      : { ...item, badge: null as number | null }
+  );
+
+  const [displayName,  setDisplayName]  = useState('IT Admin');
   const [displayEmail, setDisplayEmail] = useState('admin@company.com');
 
   useEffect(() => {
@@ -136,29 +125,29 @@ export default function Sidebar() {
               Main
             </p>
           )}
-          {navItems?.map((item) => {
-            const Icon = item?.icon;
-            const isActive = pathname === item?.href || pathname?.startsWith(item?.href + '/');
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
             return (
-              <Link key={item?.id} href={item?.href}>
+              <Link key={item.id} href={item.href}>
                 <span
                   className={`sidebar-nav-item ${
                     isActive ? 'sidebar-nav-item-active' : 'sidebar-nav-item-inactive'
                   } ${collapsed ? 'justify-center px-0' : ''}`}
-                  title={collapsed ? item?.label : undefined}
+                  title={collapsed ? item.label : undefined}
                 >
                   <Icon size={18} className="flex-shrink-0" />
                   {!collapsed && (
                     <>
-                      <span className="flex-1 truncate">{item?.label}</span>
-                      {item?.badge !== null && (
+                      <span className="flex-1 truncate">{item.label}</span>
+                      {item.badge !== null && (
                         <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-semibold bg-amber-100 text-amber-700 rounded-full">
-                          {item?.badge}
+                          {item.badge}
                         </span>
                       )}
                     </>
                   )}
-                  {collapsed && item?.badge !== null && (
+                  {collapsed && item.badge !== null && (
                     <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-amber-500 rounded-full" />
                   )}
                 </span>
@@ -169,18 +158,18 @@ export default function Sidebar() {
 
         {/* Bottom Section */}
         <div className="px-2 py-3 border-t border-slate-100 space-y-1">
-          {BOTTOM_ITEMS?.map((item) => {
-            const Icon = item?.icon;
+          {BOTTOM_ITEMS.map((item) => {
+            const Icon = item.icon;
             return (
-              <Link key={item?.id} href={item?.href}>
+              <Link key={item.id} href={item.href}>
                 <span
                   className={`sidebar-nav-item sidebar-nav-item-inactive ${
                     collapsed ? 'justify-center px-0' : ''
                   }`}
-                  title={collapsed ? item?.label : undefined}
+                  title={collapsed ? item.label : undefined}
                 >
                   <Icon size={18} className="flex-shrink-0" />
-                  {!collapsed && <span className="truncate">{item?.label}</span>}
+                  {!collapsed && <span className="truncate">{item.label}</span>}
                 </span>
               </Link>
             );
@@ -228,7 +217,12 @@ export default function Sidebar() {
       </aside>
 
       {/* Mobile Top Bar */}
-      <MobileTopBar displayName={displayName} displayEmail={displayEmail} initials={initials} />
+      <MobileTopBar
+        displayName={displayName}
+        displayEmail={displayEmail}
+        initials={initials}
+        navItems={navItems}
+      />
     </>
   );
 }
@@ -237,14 +231,15 @@ function MobileTopBar({
   displayName,
   displayEmail,
   initials,
+  navItems,
 }: {
   displayName: string;
   displayEmail: string;
   initials: string;
+  navItems: typeof NAV_ITEMS[number][];
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const navItems = getNavItems();
 
   return (
     <>
@@ -256,7 +251,6 @@ function MobileTopBar({
         <div className="flex items-center gap-2">
           <button className="icon-btn relative">
             <Bell size={18} />
-            <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-red-500 rounded-full" />
           </button>
           <button onClick={() => setOpen(true)} className="icon-btn">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -268,7 +262,6 @@ function MobileTopBar({
         </div>
       </div>
 
-      {/* Mobile Drawer */}
       {open && (
         <div className="lg:hidden fixed inset-0 z-50 flex">
           <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
@@ -285,23 +278,22 @@ function MobileTopBar({
                 </svg>
               </button>
             </div>
-
             <nav className="flex-1 px-3 py-4 space-y-1">
-              {navItems?.map((item) => {
-                const Icon = item?.icon;
-                const isActive = pathname === item?.href;
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.href;
                 return (
-                  <Link key={item?.id} href={item?.href} onClick={() => setOpen(false)}>
+                  <Link key={item.id} href={item.href} onClick={() => setOpen(false)}>
                     <span
                       className={`sidebar-nav-item ${
                         isActive ? 'sidebar-nav-item-active' : 'sidebar-nav-item-inactive'
                       }`}
                     >
                       <Icon size={18} />
-                      <span className="flex-1">{item?.label}</span>
-                      {item?.badge !== null && (
+                      <span className="flex-1">{item.label}</span>
+                      {item.badge !== null && (
                         <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-semibold bg-amber-100 text-amber-700 rounded-full">
-                          {item?.badge}
+                          {item.badge}
                         </span>
                       )}
                     </span>
@@ -309,8 +301,6 @@ function MobileTopBar({
                 );
               })}
             </nav>
-
-            {/* Mobile user row */}
             <div className="px-4 py-4 border-t border-slate-100 flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
                 <span className="text-white text-xs font-semibold leading-none select-none">
@@ -331,7 +321,6 @@ function MobileTopBar({
         </div>
       )}
 
-      {/* Mobile spacer */}
       <div className="lg:hidden h-14 flex-shrink-0" />
     </>
   );

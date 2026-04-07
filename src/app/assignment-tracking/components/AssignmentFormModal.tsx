@@ -3,26 +3,18 @@
 import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import Modal from '@/components/ui/Modal';
-import { Assignment, AssetCategory, Asset } from '@/lib/mockData';
+import { Assignment, AssetCategory, Asset } from '@/lib/supabase/types';
+import { CATEGORIES, SCHOOL_DEPARTMENTS } from '@/lib/assetUtils';
 import { Loader2, PackageCheck } from 'lucide-react';
 
 type FormData = Omit<Assignment, 'id' | 'status' | 'returnedDate'>;
 
 interface AssignmentFormModalProps {
-  open: boolean;
-  onClose: () => void;
-  onSubmit: (data: Omit<Assignment, 'id'>) => void;
+  open:            boolean;
+  onClose:         () => void;
+  onSubmit:        (data: Omit<Assignment, 'id'>) => void;
   availableAssets?: Asset[];
 }
-
-const CATEGORIES: AssetCategory[] = [
-  'Laptop', 'Desktop', 'Monitor', 'Printer', 'Networking', 'Accessory', 'Server', 'Phone',
-];
-
-const DEPARTMENTS = [
-  'Engineering', 'Design', 'Finance', 'Administration',
-  'IT Infrastructure', 'Sales', 'Marketing', 'HR', 'Legal', 'Operations',
-];
 
 export default function AssignmentFormModal({
   open,
@@ -38,8 +30,8 @@ export default function AssignmentFormModal({
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     defaultValues: {
-      category: 'Laptop',
-      department: 'Engineering',
+      category:     'Laptop',
+      department:   'Administration',
       dateAssigned: new Date().toISOString().split('T')[0],
     },
   });
@@ -47,26 +39,25 @@ export default function AssignmentFormModal({
   useEffect(() => {
     if (open) {
       reset({
-        category: 'Laptop',
-        department: 'Engineering',
+        category:     'Laptop',
+        department:   'Administration',
         dateAssigned: new Date().toISOString().split('T')[0],
       });
     }
   }, [open, reset]);
 
-  // When user picks a tag from the dropdown, auto-fill name + category
   function handleAssetSelect(e: React.ChangeEvent<HTMLSelectElement>) {
-    const tag = e.target.value;
+    const tag   = e.target.value;
     setValue('assetTag', tag);
     const found = availableAssets.find((a) => a.assetTag === tag);
     if (found) {
       setValue('assetName', found.name);
-      setValue('category', found.category);
+      setValue('category',  found.category);
     }
   }
 
   const onFormSubmit = async (data: FormData) => {
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((r) => setTimeout(r, 300));
     onSubmit({ ...data, status: 'Active' });
   };
 
@@ -88,7 +79,6 @@ export default function AssignmentFormModal({
             Asset Details
           </h3>
 
-          {/* Quick-pick from available assets */}
           {availableAssets.length > 0 && (
             <div className="mb-4">
               <label className="form-label flex items-center gap-1.5">
@@ -96,7 +86,7 @@ export default function AssignmentFormModal({
                 Pick from Available Assets
               </label>
               <p className="form-helper -mt-0.5 mb-1">
-                {availableAssets.length} asset{availableAssets.length > 1 ? 's' : ''} ready to assign — selecting one auto-fills the fields below
+                {availableAssets.length} asset{availableAssets.length !== 1 ? 's' : ''} ready to assign
               </p>
               <select
                 onChange={handleAssetSelect}
@@ -106,7 +96,7 @@ export default function AssignmentFormModal({
                 <option value="" disabled>— Select an available asset —</option>
                 {availableAssets.map((a) => (
                   <option key={a.id} value={a.assetTag}>
-                    {a.assetTag} — {a.name} ({a.category}) · {a.location}
+                    {a.assetTag} — {a.name} ({a.category}){a.school ? ` · ${a.school}` : ''} · {a.location}
                   </option>
                 ))}
               </select>
@@ -118,11 +108,8 @@ export default function AssignmentFormModal({
               <label className="form-label">
                 Asset Tag <span className="text-red-500">*</span>
               </label>
-              <p className="form-helper -mt-0.5 mb-1">The asset tag of the item being assigned</p>
               <input
-                {...register('assetTag', {
-                  required: 'Asset tag is required',
-                })}
+                {...register('assetTag', { required: 'Asset tag is required' })}
                 placeholder="e.g. INF-LT-0042"
                 className="form-input font-mono"
               />
@@ -165,8 +152,11 @@ export default function AssignmentFormModal({
                 Staff Name <span className="text-red-500">*</span>
               </label>
               <input
-                {...register('staffName', { required: 'Staff name is required', minLength: { value: 2, message: 'Name too short' } })}
-                placeholder="e.g. Priya Nair"
+                {...register('staffName', {
+                  required:  'Staff name is required',
+                  minLength: { value: 2, message: 'Name too short' },
+                })}
+                placeholder="e.g. Kwame Mensah"
                 className="form-input"
               />
               {errors.staffName && <p className="form-error">{errors.staffName.message}</p>}
@@ -175,11 +165,11 @@ export default function AssignmentFormModal({
               <label className="form-label">
                 Staff ID <span className="text-red-500">*</span>
               </label>
-              <p className="form-helper -mt-0.5 mb-1">Employee ID from HR system</p>
+              <p className="form-helper -mt-0.5 mb-1">Employee ID — format EMP-0000</p>
               <input
                 {...register('staffId', {
                   required: 'Staff ID is required',
-                  pattern: { value: /^EMP-\d{4}$/, message: 'Format must be EMP-0000' },
+                  pattern:  { value: /^EMP-\d{4}$/, message: 'Format must be EMP-0000' },
                 })}
                 placeholder="EMP-1042"
                 className="form-input font-mono"
@@ -188,10 +178,11 @@ export default function AssignmentFormModal({
             </div>
             <div>
               <label className="form-label">
-                Department <span className="text-red-500">*</span>
+                Department / Year Group <span className="text-red-500">*</span>
               </label>
+              {/* FIX: replaced generic corporate list with school departments */}
               <select {...register('department', { required: true })} className="form-input">
-                {DEPARTMENTS.map((d) => (
+                {SCHOOL_DEPARTMENTS.map((d) => (
                   <option key={`asgn-dept-${d}`} value={d}>{d}</option>
                 ))}
               </select>
@@ -207,7 +198,6 @@ export default function AssignmentFormModal({
             Assignment Dates
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* FIX: restored dateAssigned field */}
             <div>
               <label className="form-label">
                 Date Assigned <span className="text-red-500">*</span>
@@ -220,7 +210,6 @@ export default function AssignmentFormModal({
               />
               {errors.dateAssigned && <p className="form-error">{errors.dateAssigned.message}</p>}
             </div>
-            {/* FIX: restored expectedReturn as its own field */}
             <div>
               <label className="form-label">
                 Expected Return <span className="text-red-500">*</span>
@@ -229,15 +218,15 @@ export default function AssignmentFormModal({
                 type="date"
                 {...register('expectedReturn', {
                   required: 'Expected return date is required',
-                  validate: (value) => {
-                    const todayStr = new Date().toISOString().split('T')[0];
-                    return value >= todayStr || 'Return date must be today or later';
-                  },
+                  validate: (value) =>
+                    value >= today || 'Return date must be today or later',
                 })}
                 min={today}
                 className="form-input"
               />
-              {errors.expectedReturn && <p className="form-error">{errors.expectedReturn.message}</p>}
+              {errors.expectedReturn && (
+                <p className="form-error">{errors.expectedReturn.message}</p>
+              )}
             </div>
           </div>
         </div>

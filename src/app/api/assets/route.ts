@@ -14,8 +14,8 @@ export async function GET(request: NextRequest) {
   let query = supabase.from('assets').select('*').order('asset_tag', { ascending: true });
 
   if (category) query = query.eq('category', category);
-  if (status)   query = query.eq('status', status);
-  if (school)   query = query.eq('school', school);
+  if (status)   query = query.eq('status',   status);
+  if (school)   query = query.eq('school',   school);
   if (search) {
     query = query.or(
       `name.ilike.%${search}%,asset_tag.ilike.%${search}%,serial_number.ilike.%${search}%,location.ilike.%${search}%,assigned_to.ilike.%${search}%`
@@ -23,20 +23,33 @@ export async function GET(request: NextRequest) {
   }
 
   const { data, error } = await query;
-
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
 }
 
-
 export async function POST(request: NextRequest) {
   const authResult = await checkAuth('operator');
   if (authResult instanceof NextResponse) return authResult;
+
   const supabase = await createClient();
   const body = await request.json();
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // FIX: check for duplicate asset_tag before inserting
+  const { data: existing } = await supabase
+    .from('assets')
+    .select('id')
+    .eq('asset_tag', body.assetTag)
+    .maybeSingle();
+
+  if (existing) {
+    return NextResponse.json(
+      { error: `Asset tag ${body.assetTag} already exists. Please use the regenerate button to get a unique tag.` },
+      { status: 409 }
+    );
+  }
 
   const { data, error } = await supabase
     .from('assets')
@@ -48,11 +61,11 @@ export async function POST(request: NextRequest) {
       purchase_date:  body.purchaseDate,
       status:         body.status ?? 'Available',
       location:       body.location,
-      school:         body.school ?? null,
-      assigned_to:    body.assignedTo    ?? null,
-      assigned_to_id: body.assignedToId  ?? null,
-      department:     body.department    ?? null,
-      notes:          body.notes         ?? null,
+      school:         body.school         ?? null,
+      assigned_to:    body.assignedTo     ?? null,
+      assigned_to_id: body.assignedToId   ?? null,
+      department:     body.department     ?? null,
+      notes:          body.notes          ?? null,
     })
     .select()
     .single();
