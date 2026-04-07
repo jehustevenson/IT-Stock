@@ -22,7 +22,9 @@ const ACTION_CONFIG: Record<
 };
 
 function formatTimestamp(ts: string) {
-  return new Date(ts).toLocaleString('en-US', {
+  // Ensure UTC interpretation by appending Z if missing
+  const normalized = ts.endsWith('Z') ? ts : ts + 'Z';
+  return new Date(normalized).toLocaleString('en-US', {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 }

@@ -3,6 +3,9 @@ import { createClient } from '@/lib/supabase/server';
 import { checkAuth } from '@/lib/auth-utils';
 
 export async function GET(request: NextRequest) {
+  const authResult = await checkAuth('viewer');
+  if (authResult instanceof NextResponse) return authResult;
+
   const supabase = await createClient();
 
   const { searchParams } = new URL(request.url);

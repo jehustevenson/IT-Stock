@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import AppLogo from '@/components/ui/AppLogo';
@@ -69,11 +69,14 @@ export default function Sidebar() {
     (a) => a.status === 'Active' || a.status === 'Overdue'
   ).length || null;
 
-  const navItems = NAV_ITEMS.map((item) =>
+const navItems = useMemo(() =>
+  NAV_ITEMS.map((item) =>
     item.id === 'nav-assignments'
       ? { ...item, badge: assignmentBadge }
       : { ...item, badge: null as number | null }
-  );
+  ),
+  [assignmentBadge]
+);
 
   const [displayName,  setDisplayName]  = useState('IT Admin');
   const [displayEmail, setDisplayEmail] = useState('admin@company.com');

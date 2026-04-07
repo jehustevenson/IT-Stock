@@ -50,36 +50,27 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
 
   // Find asset UUID from tag
-  const { data: asset, error: assetErr } = await supabase
-    .from('assets')
-    .select('id, name, status')
-    .eq('asset_tag', body.assetTag)
-    .single();
+  // Always check for active assignments — don't rely solely on asset.status
+const { data: activeAssignment } = await supabase
+  .from('assignments')
+  .select('id, staff_name, staff_id')
+  .eq('asset_tag', body.assetTag)
+  .in('status', ['Active', 'Overdue'])
+  .limit(1)
+  .maybeSingle();
 
-  if (assetErr || !asset) {
-    return NextResponse.json({ error: `Asset ${body.assetTag} not found` }, { status: 404 });
-  }
+if (activeAssignment) {
+  return NextResponse.json(
+    {
+      error: `Asset ${body.assetTag} is already assigned to ${activeAssignment.staff_name} (${activeAssignment.staff_id}). Please process a return before reassigning.`,
+    },
+    { status: 409 }
+  );
+}
 
-  // Guard: prevent assigning an asset that is already actively assigned
-  if (asset.status === 'Assigned') {
-    // Check if there's an active/overdue assignment for this asset
-    const { data: activeAssignment } = await supabase
-      .from('assignments')
-      .select('id, staff_name, staff_id')
-      .eq('asset_tag', body.assetTag)
-      .in('status', ['Active', 'Overdue'])
-      .limit(1)
-      .maybeSingle();
-
-    if (activeAssignment) {
-      return NextResponse.json(
-        {
-          error: `Asset ${body.assetTag} is already assigned to ${activeAssignment.staff_name} (${activeAssignment.staff_id}). Please process a return before reassigning.`,
-        },
-        { status: 409 }
-      );
-    }
-  }
+// Then check asset status for Faulty/Retired
+if (asset.status === 'Faulty') { ... }
+if (asset.status === 'Retired') { ... }
 
   // Guard: prevent assigning a faulty or retired asset
   if (asset.status === 'Faulty') {

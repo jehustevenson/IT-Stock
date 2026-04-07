@@ -4,7 +4,6 @@ import React, {
   createContext, useContext, useState,
   useCallback, useEffect, ReactNode,
 } from 'react';
-import { useRouter } from 'next/navigation';
 import { Asset, AssetStatus, Assignment } from '@/lib/supabase/types';
 import { markOverdueAssignments } from '@/app/actions/overdue';
 
