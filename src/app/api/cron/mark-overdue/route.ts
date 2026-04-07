@@ -1,6 +1,6 @@
-// src/app/api/cron/validate-consistency/route.ts
+// src/app/api/cron/mark-overdue/route.ts
 
-import { validateDataConsistency } from '@/lib/data-consistency-utils';
+import { markOverdueAssignments } from '@/app/actions/overdue';
 
 export async function GET(request: Request) {
   // Guard: ensure CRON_SECRET is configured
@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await validateDataConsistency();
+    const result = await markOverdueAssignments();
     return Response.json(result);
   } catch (error) {
     return Response.json({ error: String(error) }, { status: 500 });
