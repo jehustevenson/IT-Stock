@@ -1,5 +1,5 @@
 import React from 'react';
-import { AssetStatus } from '@/lib/mockData';
+import { AssetStatus } from '@/lib/supabase/types';
 
 interface StatusBadgeProps {
   status: AssetStatus | 'Active' | 'Returned' | 'Overdue';

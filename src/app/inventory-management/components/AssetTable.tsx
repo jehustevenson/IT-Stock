@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Asset, AssetStatus } from '@/lib/mockData';
+import { Asset, AssetStatus } from '@/lib/supabase/types';
 import StatusBadge from '@/components/ui/StatusBadge';
 import {
   Edit3,
@@ -49,7 +49,7 @@ function StatusDropdown({
   asset: Asset;
   onStatusChange: (id: string, status: AssetStatus) => void;
   onClose: () => void;
-  anchorRef: React.RefObject<HTMLButtonElement>;
+  anchorRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   const [coords, setCoords] = useState({ top: 0, left: 0 });
 
@@ -78,26 +78,63 @@ function StatusDropdown({
     return () => window.removeEventListener('scroll', handler, true);
   }, [onClose]);
 
+  // Mirror the server-side transition rules so disallowed options are visibly
+  // muted instead of producing a toast error after the click. The server is
+  // still the source of truth — this is just UX.
+  //   • Assigned is only set by creating an assignment, never via this menu.
+  //   • If the asset is currently Assigned, it must be returned before its
+  //     status can change from here (the inline menu doesn't know whether
+  //     there's an active assignment, so we block the whole transition set —
+  //     the PATCH handler will allow it iff no active assignment exists).
+  function isAllowed(target: AssetStatus): boolean {
+    if (target === asset.status) return true;
+    if (target === 'Assigned') return false;
+    if (asset.status === 'Assigned') return false;
+    return true;
+  }
+
+  function disabledReason(target: AssetStatus): string | null {
+    if (target === asset.status) return null;
+    if (target === 'Assigned') {
+      return 'Create an assignment instead of setting this manually.';
+    }
+    if (asset.status === 'Assigned') {
+      return 'Process the return first, then change status.';
+    }
+    return null;
+  }
+
   return createPortal(
     <div
       className="fixed z-50 bg-white border border-slate-200 rounded-lg shadow-lg min-w-[140px] py-1 slide-up"
       style={{ top: coords.top, left: coords.left }}
     >
-      {STATUSES.map((s) => (
-        <button
-          key={`status-opt-${asset.id}-${s}`}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            onStatusChange(asset.id, s);
-            onClose();
-          }}
-          className={`w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 transition-colors flex items-center gap-2 ${
-            asset.status === s ? 'font-semibold text-blue-600' : 'text-slate-600'
-          }`}
-        >
-          <StatusBadge status={s} size="sm" />
-        </button>
-      ))}
+      {STATUSES.map((s) => {
+        const allowed = isAllowed(s);
+        const reason  = disabledReason(s);
+        return (
+          <button
+            key={`status-opt-${asset.id}-${s}`}
+            disabled={!allowed}
+            title={reason ?? undefined}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              if (!allowed) return;
+              onStatusChange(asset.id, s);
+              onClose();
+            }}
+            className={`w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center gap-2 ${
+              !allowed
+                ? 'opacity-40 cursor-not-allowed'
+                : 'hover:bg-slate-50'
+            } ${
+              asset.status === s ? 'font-semibold text-blue-600' : 'text-slate-600'
+            }`}
+          >
+            <StatusBadge status={s} size="sm" />
+          </button>
+        );
+      })}
     </div>,
     document.body
   );
@@ -109,7 +146,7 @@ export default function AssetTable({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [openStatusId, setOpenStatusId] = useState<string | null>(null);
-  const buttonRefs = useRef<Record<string, React.RefObject<HTMLButtonElement>>>({});
+  const buttonRefs = useRef<Record<string, React.RefObject<HTMLButtonElement | null>>>({});
 
   const totalPages = Math.max(1, Math.ceil(assets.length / pageSize));
   const paginated = assets.slice((page - 1) * pageSize, page * pageSize);
@@ -152,6 +189,8 @@ export default function AssetTable({
     { key: 'status', label: 'Status', sortable: true },
     { key: 'location', label: 'Location', sortable: true },
     { key: 'purchaseDate', label: 'Purchased', sortable: true },
+    { key: 'supplier', label: 'Supplier', sortable: true },
+    { key: 'purchaseCost', label: 'Cost', sortable: true },
     { key: 'assignedTo', label: 'Assigned To', sortable: false },
   ];
 
@@ -172,7 +211,7 @@ export default function AssetTable({
   return (
     <div className="card overflow-hidden">
       <div className="overflow-x-auto scrollbar-thin">
-        <table className="w-full min-w-[1000px]">
+        <table className="w-full min-w-[1150px]">
           <thead className="bg-slate-50 border-b border-slate-100">
             <tr>
               <th className="table-th w-10">
@@ -271,6 +310,25 @@ export default function AssetTable({
                         month: 'short', day: 'numeric', year: 'numeric',
                       })}
                     </span>
+                  </td>
+                  <td className="table-td">
+                    {asset.supplier ? (
+                      <span className="text-slate-600 text-xs">{asset.supplier}</span>
+                    ) : (
+                      <span className="text-xs text-slate-300">—</span>
+                    )}
+                  </td>
+                  <td className="table-td">
+                    {asset.purchaseCost !== undefined && asset.purchaseCost !== null ? (
+                      <span className="text-slate-600 text-xs tabular-nums">
+                        {asset.purchaseCost.toLocaleString('en-US', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-300">—</span>
+                    )}
                   </td>
                   <td className="table-td">
                     {asset.assignedTo ? (

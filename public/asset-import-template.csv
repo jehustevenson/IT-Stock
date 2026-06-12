@@ -1,0 +1,4 @@
+assetTag,name,category,serialNumber,purchaseDate,status,location,school,notes,supplier,purchaseCost
+INF-LT-0001,Dell Latitude 5540,Laptop,SN-ABC-12345,2024-08-15,Available,IT Workshop,Infant School,Spare laptop for staff rotation,CompuGhana,4500.00
+JUN-MN-0002,Dell 24" Monitor,Monitor,SN-DEF-67890,2024-09-01,Available,Computer Lab 2,Junior School,,,
+SEC-PR-0003,HP LaserJet Pro,Printer,SN-GHI-54321,2025-01-10,Available,Main Office,Secondary School,,,

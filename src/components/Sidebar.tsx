@@ -15,6 +15,7 @@ import {
   Bell,
   User,
   PlusCircle,
+  FileText,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { signOut } from '@/app/auth/actions';
@@ -44,6 +45,12 @@ const NAV_ITEMS = [
     label: 'Assignments',
     href:  '/assignment-tracking',
     icon:  ClipboardList,
+  },
+  {
+    id:   'nav-waybills',
+    label: 'Waybills',
+    href:  '/waybills',
+    icon:  FileText,
   },
 ];
 
@@ -239,7 +246,7 @@ function MobileTopBar({
   displayName: string;
   displayEmail: string;
   initials: string;
-  navItems: typeof NAV_ITEMS[number][];
+  navItems: (typeof NAV_ITEMS[number] & { badge: number | null })[];
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();

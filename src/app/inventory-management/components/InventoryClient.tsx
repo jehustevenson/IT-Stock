@@ -2,20 +2,21 @@
 
 import React, { useState, useMemo } from 'react';
 import { toast, Toaster } from 'sonner';
-import { Plus, Search, Filter, Download, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Filter, Download, Upload, AlertTriangle } from 'lucide-react';
 import { Asset, AssetStatus, AssetCategory, SCHOOLS } from '@/lib/supabase/types';
 import { CATEGORIES, exportAssetsCSV } from '@/lib/assetUtils';
 import { useAppData } from '@/lib/AppDataContext';
 import AssetTable from './AssetTable';
 import AssetFormModal from './AssetFormModal';
 import QRCodeModal from './QRCodeModal';
+import BulkImportModal from './BulkImportModal';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 
 const STATUSES: AssetStatus[] = ['Available', 'Assigned', 'Faulty', 'Retired'];
 
 export default function InventoryClient() {
   const {
-    assets, loading, error,
+    assets, loading, error, refetch,
     addAsset, updateAsset, deleteAsset, deleteAssets, changeAssetStatus,
   } = useAppData();
 
@@ -27,6 +28,7 @@ export default function InventoryClient() {
   const [sortDir,          setSortDir]          = useState<'asc' | 'desc'>('asc');
   const [selectedIds,      setSelectedIds]      = useState<Set<string>>(new Set());
   const [addModalOpen,     setAddModalOpen]     = useState(false);
+  const [importModalOpen,  setImportModalOpen]  = useState(false);
   const [editAsset,        setEditAsset]        = useState<Asset | null>(null);
   const [qrAsset,          setQrAsset]          = useState<Asset | null>(null);
   const [deleteId,         setDeleteId]         = useState<string | null>(null);
@@ -189,6 +191,13 @@ export default function InventoryClient() {
               <Download size={14} />
               Export CSV
             </button>
+            <button
+              onClick={() => setImportModalOpen(true)}
+              className="btn-secondary text-xs gap-1.5"
+            >
+              <Upload size={14} />
+              Import CSV
+            </button>
             <button onClick={() => setAddModalOpen(true)} className="btn-primary text-xs gap-1.5">
               <Plus size={14} />
               Add Asset
@@ -322,6 +331,15 @@ export default function InventoryClient() {
       </div>
 
       {/* Modals */}
+      <BulkImportModal
+        open={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onImported={() => {
+          // Reconcile client cache with what actually got persisted
+          refetch();
+          toast.success('Import complete');
+        }}
+      />
       <AssetFormModal
         open={addModalOpen}
         onClose={() => setAddModalOpen(false)}

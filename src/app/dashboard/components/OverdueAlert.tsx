@@ -1,7 +1,7 @@
 import React from 'react';
 import { AlertTriangle, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
-import { Assignment } from '@/lib/mockData';
+import { Assignment } from '@/lib/supabase/types';
 
 interface OverdueAlertProps {
   overdueAssignments: Assignment[];

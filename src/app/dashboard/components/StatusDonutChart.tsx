@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { Asset } from '@/lib/mockData';
+import { Asset } from '@/lib/supabase/types';
 
 interface StatusDonutChartProps {
   assets: Asset[];
@@ -15,7 +15,16 @@ const STATUS_COLORS: Record<string, string> = {
   Retired:   'hsl(215 16% 65%)',
 };
 
-const CustomTooltip = ({ active, payload }: any) => {
+interface TooltipPayloadEntry {
+  name?: string | number;
+  value?: string | number;
+}
+interface TooltipProps {
+  active?: boolean;
+  payload?: TooltipPayloadEntry[];
+}
+
+const CustomTooltip = ({ active, payload }: TooltipProps) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-white border border-slate-200 rounded-lg shadow-card p-2.5 text-xs">

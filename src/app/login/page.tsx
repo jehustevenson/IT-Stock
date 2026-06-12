@@ -1,12 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { useRouter } from 'next/navigation';
 import { Loader2, LogIn, Monitor } from 'lucide-react';
 
 export default function LoginPage() {
-  const router = useRouter();
   const supabase = createClient();
 
   const [email, setEmail] = useState('');
@@ -27,8 +26,10 @@ export default function LoginPage() {
       return;
     }
 
-    router.push('/dashboard');
-    router.refresh();
+    // Hard navigation (not router.push): AppDataProvider lives in the root
+    // layout and skips data-loading while on /login, so we need a full page
+    // load to remount it and fetch data with the fresh session cookies.
+    window.location.assign('/dashboard');
   }
 
   return (
@@ -62,7 +63,15 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <label className="form-label">Password</label>
+              <div className="flex items-center justify-between">
+                <label className="form-label">Password</label>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs text-blue-600 hover:text-blue-700"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <input
                 type="password"
                 value={password}

@@ -4,7 +4,15 @@ import React, {
   createContext, useContext, useState,
   useCallback, useEffect, ReactNode,
 } from 'react';
-import { Asset, AssetStatus, Assignment } from '@/lib/supabase/types';
+import {
+  Asset,
+  AssetStatus,
+  Assignment,
+  DBAsset,
+  DBAssignment,
+  toAsset,
+  toAssignment,
+} from '@/lib/supabase/types';
 import { markOverdueAssignments } from '@/app/actions/overdue';
 
 interface AppDataContextValue {
@@ -12,6 +20,7 @@ interface AppDataContextValue {
   assignments: Assignment[];
   loading:     boolean;
   error:       string | null;
+  refetch:     () => Promise<void>;
 
   addAsset:          (asset: Omit<Asset, 'id'>) => Promise<Asset>;
   updateAsset:       (asset: Asset) => Promise<void>;
@@ -19,62 +28,63 @@ interface AppDataContextValue {
   deleteAssets:      (ids: Set<string>) => Promise<void>;
   changeAssetStatus: (id: string, status: AssetStatus) => Promise<void>;
 
-  addAssignment:    (assignment: Omit<Assignment, 'id'>) => Promise<void>;
-  returnAssignment: (id: string, returnedDate: string, condition?: string, notes?: string) => Promise<void>;
+  addAssignment:          (assignment: Omit<Assignment, 'id'>) => Promise<void>;
+  returnAssignment:       (id: string, returnedDate: string, condition?: string, notes?: string) => Promise<void>;
+  updateAssignmentReturn: (id: string, expectedReturn: string) => Promise<void>;
 }
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
 
-// ── Mappers ───────────────────────────────────────────────────────────────────
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function rowToAsset(row: any): Asset {
-  return {
-    id:            row.id,
-    assetTag:      row.asset_tag,
-    name:          row.name,
-    category:      row.category,
-    serialNumber:  row.serial_number,
-    purchaseDate:  row.purchase_date,
-    status:        row.status,
-    location:      row.location,
-    school:        row.school          ?? undefined,
-    assignedTo:    row.assigned_to     ?? undefined,
-    assignedToId:  row.assigned_to_id  ?? undefined,
-    department:    row.department      ?? undefined,
-    notes:         row.notes           ?? undefined,
-  };
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function rowToAssignment(row: any): Assignment {
-  return {
-    id:             row.id,
-    assetId:        row.asset_id,
-    assetTag:       row.asset_tag,
-    assetName:      row.asset_name,
-    category:       row.category,
-    staffName:      row.staff_name,
-    staffId:        row.staff_id,
-    department:     row.department,
-    dateAssigned:   row.date_assigned,
-    expectedReturn: row.expected_return,
-    status:         row.status,
-    returnedDate:   row.returned_date ?? undefined,
-    notes:          row.notes         ?? undefined,
-  };
-}
-
 // ── Helper: redirect to /login on 401 ────────────────────────────────────────
+
+// Pages where no app data should load and 401s must never redirect —
+// redirecting from here causes reload loops or kicks users out of the
+// password-reset flow. Keep in sync with the middleware's isAuthPage list.
+const AUTH_PAGES = ['/login', '/forgot-password', '/reset-password'];
+
+function isOnAuthPage(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    AUTH_PAGES.some((p) => window.location.pathname.startsWith(p))
+  );
+}
 
 async function apiFetch(url: string, options?: RequestInit): Promise<Response> {
   const res = await fetch(url, options);
   if (res.status === 401) {
-    // Session expired — hard redirect to login
-    window.location.href = '/login';
+    // Session expired — hard redirect to login. Never redirect if we're
+    // already on /login: that reloads the page, remounts the provider, and
+    // creates an infinite refresh loop.
+    if (typeof window !== 'undefined' && !isOnAuthPage()) {
+      window.location.href = '/login';
+    }
     throw new Error('Session expired');
   }
   return res;
+}
+
+// ── Paginated fetch helpers ──────────────────────────────────────────────────
+// API routes now return { data, pagination }. Walk pages until hasMore is false.
+
+interface Paginated<T> {
+  data: T[];
+  pagination: { offset: number; limit: number; total: number; hasMore: boolean };
+}
+
+async function fetchAllPages<T>(baseUrl: string): Promise<T[]> {
+  const pageSize = 500;
+  let offset = 0;
+  let collected: T[] = [];
+  // Safety bound: stop after 20 pages (10,000 rows) to avoid runaway loops.
+  for (let i = 0; i < 20; i += 1) {
+    const res = await apiFetch(`${baseUrl}?limit=${pageSize}&offset=${offset}`);
+    if (!res.ok) throw new Error(`API error ${res.status} fetching ${baseUrl}`);
+    const body = (await res.json()) as Paginated<T>;
+    collected = collected.concat(body.data ?? []);
+    if (!body.pagination?.hasMore) break;
+    offset += pageSize;
+  }
+  return collected;
 }
 
 // ── Provider ──────────────────────────────────────────────────────────────────
@@ -85,38 +95,46 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState<string | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      setError(null);
-      try {
-        // FIX: mark overdue before fetching so statuses are fresh on every load
-        await markOverdueAssignments().catch((e) =>
-          console.warn('Overdue check failed (non-fatal):', e)
-        );
-
-        const [aRes, asRes] = await Promise.all([
-          apiFetch('/api/assets'),
-          apiFetch('/api/assignments'),
-        ]);
-
-        if (!aRes.ok)  throw new Error(`Assets API error: ${aRes.status}`);
-        if (!asRes.ok) throw new Error(`Assignments API error: ${asRes.status}`);
-
-        setAssets((await aRes.json()).map(rowToAsset));
-        setAssignments((await asRes.json()).map(rowToAssignment));
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Failed to load data';
-        // Don't surface "Session expired" — the redirect handles it
-        if (msg !== 'Session expired') {
-          console.error('AppDataContext load error:', err);
-          setError(msg);
-        }
-      } finally {
-        setLoading(false);
-      }
+  const load = useCallback(async () => {
+    // No data to load on auth pages — and fetching here would 401.
+    if (isOnAuthPage()) {
+      setLoading(false);
+      return;
     }
-    load();
+    setError(null);
+    try {
+      // Mark overdue before fetching so statuses are fresh on every load.
+      await markOverdueAssignments().catch((e) =>
+        console.warn('Overdue check failed (non-fatal):', e)
+      );
+
+      const [assetRows, assignmentRows] = await Promise.all([
+        fetchAllPages<DBAsset>('/api/assets'),
+        fetchAllPages<DBAssignment>('/api/assignments'),
+      ]);
+
+      setAssets(assetRows.map(toAsset));
+      setAssignments(assignmentRows.map(toAssignment));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to load data';
+      // Don't surface "Session expired" — the redirect handles it
+      if (msg !== 'Session expired') {
+        console.error('AppDataContext load error:', err);
+        setError(msg);
+      }
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const refetch = useCallback(async () => {
+    setLoading(true);
+    await load();
+  }, [load]);
 
   // ── Asset mutations ─────────────────────────────────────────────────────────
 
@@ -132,12 +150,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       throw new Error(err.error ?? 'Failed to add asset');
     }
 
-    const newAsset = rowToAsset(await res.json());
+    const newAsset = toAsset((await res.json()) as DBAsset);
     setAssets((prev) => [newAsset, ...prev]);
-
-    // FIX: removed the silent paired-assignment creation that bypassed validation.
-    // Assignments must be created explicitly through the Assignment form.
-
     return newAsset;
   }, []);
 
@@ -149,19 +163,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     });
 
     if (!res.ok) {
+      // Server state unchanged; refetch to reconcile in case of partial failure.
       const err = await res.json().catch(() => ({}));
+      await load();
       throw new Error(err.error ?? 'Failed to update asset');
     }
 
-    const updatedAsset = rowToAsset(await res.json());
+    const updatedAsset = toAsset((await res.json()) as DBAsset);
     setAssets((prev) => prev.map((a) => (a.id === updated.id ? updatedAsset : a)));
-  }, []);
+  }, [load]);
 
   const deleteAsset = useCallback(async (id: string): Promise<void> => {
     const res = await apiFetch(`/api/assets/${id}`, { method: 'DELETE' });
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      await load();
       throw new Error(err.error ?? 'Failed to delete asset');
     }
 
@@ -174,24 +191,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           : asgn
       )
     );
-  }, []);
+  }, [load]);
 
   const deleteAssets = useCallback(async (ids: Set<string>): Promise<void> => {
-    // FIX: check every response — partial failures no longer silently corrupt state
+    // Check every response — partial failures no longer silently corrupt state.
     const results = await Promise.all(
       [...ids].map((id) =>
-        apiFetch(`/api/assets/${id}`, { method: 'DELETE' }).then((r) => ({ id, ok: r.ok, res: r }))
+        apiFetch(`/api/assets/${id}`, { method: 'DELETE' }).then((r) => ({ id, ok: r.ok }))
       )
     );
 
     const failed  = results.filter((r) => !r.ok);
     const deleted = new Set(results.filter((r) => r.ok).map((r) => r.id));
-
-    if (failed.length > 0) {
-      throw new Error(
-        `${failed.length} of ${ids.size} asset(s) could not be deleted. The rest were removed.`
-      );
-    }
 
     const today = new Date().toISOString().split('T')[0];
     setAssets((prev) => prev.filter((a) => !deleted.has(a.id)));
@@ -202,7 +213,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           : asgn
       )
     );
-  }, []);
+
+    if (failed.length > 0) {
+      // Reconcile with server truth before surfacing the error.
+      await load();
+      throw new Error(
+        `${failed.length} of ${ids.size} asset(s) could not be deleted. The rest were removed.`
+      );
+    }
+  }, [load]);
 
   const changeAssetStatus = useCallback(async (id: string, status: AssetStatus): Promise<void> => {
     const res = await apiFetch(`/api/assets/${id}`, {
@@ -213,11 +232,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      await load();
       throw new Error(err.error ?? 'Failed to update status');
     }
 
     setAssets((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)));
-  }, []);
+  }, [load]);
 
   // ── Assignment mutations ────────────────────────────────────────────────────
 
@@ -230,10 +250,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      // Server may have created an assignment but failed to update the asset
+      // (or vice versa). Refetch so the UI reflects actual state.
+      await load();
       throw new Error(err.error ?? 'Failed to create assignment');
     }
 
-    const newAssignment = rowToAssignment(await res.json());
+    const newAssignment = toAssignment((await res.json()) as DBAssignment);
     setAssignments((prev) => [newAssignment, ...prev]);
 
     setAssets((prev) =>
@@ -249,10 +272,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           : a
       )
     );
-  }, []);
+  }, [load]);
 
-  // FIX: returnAssignment now owns the API call instead of relying on ReturnModal
-  // to have already called it. State only updates on confirmed API success.
+  // returnAssignment now owns the API call. State only updates on confirmed success.
   const returnAssignment = useCallback(async (
     id: string,
     returnedDate: string,
@@ -267,6 +289,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      await load();
       throw new Error(err.error ?? 'Failed to process return');
     }
 
@@ -296,13 +319,34 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         )
       );
     }
-  }, []);
+  }, [load]);
+
+  // Edit an assignment's expected return date; server recomputes Active/Overdue.
+  const updateAssignmentReturn = useCallback(async (
+    id: string,
+    expectedReturn: string,
+  ): Promise<void> => {
+    const res = await apiFetch(`/api/assignments/${id}`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ expectedReturn }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      await load();
+      throw new Error(err.error ?? 'Failed to update return date');
+    }
+
+    const updated = toAssignment((await res.json()) as DBAssignment);
+    setAssignments((prev) => prev.map((a) => (a.id === id ? updated : a)));
+  }, [load]);
 
   return (
     <AppDataContext.Provider value={{
-      assets, assignments, loading, error,
+      assets, assignments, loading, error, refetch,
       addAsset, updateAsset, deleteAsset, deleteAssets, changeAssetStatus,
-      addAssignment, returnAssignment,
+      addAssignment, returnAssignment, updateAssignmentReturn,
     }}>
       {children}
     </AppDataContext.Provider>

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { AuditLog } from '@/lib/mockData';
+import { AuditLog } from '@/lib/supabase/types';
 import { PlusCircle, UserCheck, RotateCcw, AlertTriangle, Edit3, Trash2, ArrowRight, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -22,9 +22,15 @@ const ACTION_CONFIG: Record<
 };
 
 function formatTimestamp(ts: string) {
-  // Ensure UTC interpretation by appending Z if missing
-  const normalized = ts.endsWith('Z') ? ts : ts + 'Z';
-  return new Date(normalized).toLocaleString('en-US', {
+  // Supabase `timestamptz` values already carry timezone info — either a trailing
+  // `Z` or an explicit `±HH:MM` offset. Only append `Z` when neither is present
+  // (bare local-style timestamps); appending it to an offset produces an invalid
+  // string like "...+00:00Z" and renders "Invalid Date".
+  const hasTz = /(Z|[+-]\d{2}:?\d{2})$/.test(ts);
+  const normalized = hasTz ? ts : ts + 'Z';
+  const d = new Date(normalized);
+  if (isNaN(d.getTime())) return ts;
+  return d.toLocaleString('en-US', {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 }

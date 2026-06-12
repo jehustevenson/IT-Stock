@@ -3,8 +3,8 @@
 import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import Modal from '@/components/ui/Modal';
-import { Assignment, AssetCategory, Asset } from '@/lib/supabase/types';
-import { CATEGORIES, SCHOOL_DEPARTMENTS } from '@/lib/assetUtils';
+import { Assignment, Asset } from '@/lib/supabase/types';
+import { SCHOOL_DEPARTMENTS } from '@/lib/assetUtils';
 import { Loader2, PackageCheck } from 'lucide-react';
 
 type FormData = Omit<Assignment, 'id' | 'status' | 'returnedDate'>;
@@ -27,10 +27,10 @@ export default function AssignmentFormModal({
     handleSubmit,
     reset,
     setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     defaultValues: {
-      category:     'Laptop',
       department:   'Administration',
       dateAssigned: new Date().toISOString().split('T')[0],
     },
@@ -39,20 +39,30 @@ export default function AssignmentFormModal({
   useEffect(() => {
     if (open) {
       reset({
-        category:     'Laptop',
         department:   'Administration',
         dateAssigned: new Date().toISOString().split('T')[0],
       });
     }
   }, [open, reset]);
 
+  // Watch the picked-asset fields so we can show them in read-only display.
+  // Source of truth is the dropdown — these are never hand-edited.
+  const pickedTag      = watch('assetTag');
+  const pickedName     = watch('assetName');
+  const pickedCategory = watch('category');
+
   function handleAssetSelect(e: React.ChangeEvent<HTMLSelectElement>) {
     const tag   = e.target.value;
-    setValue('assetTag', tag);
     const found = availableAssets.find((a) => a.assetTag === tag);
+    // Only set form values when the selection resolves to an asset — otherwise
+    // clear them so we don't leak a stale pick into the submit payload.
     if (found) {
-      setValue('assetName', found.name);
-      setValue('category',  found.category);
+      setValue('assetTag',  found.assetTag, { shouldValidate: true });
+      setValue('assetName', found.name,     { shouldValidate: true });
+      setValue('category',  found.category, { shouldValidate: true });
+    } else {
+      setValue('assetTag',  '');
+      setValue('assetName', '');
     }
   }
 
@@ -79,18 +89,26 @@ export default function AssignmentFormModal({
             Asset Details
           </h3>
 
-          {availableAssets.length > 0 && (
+          {availableAssets.length === 0 ? (
+            <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-sm text-amber-800 font-medium">No assets available to assign</p>
+              <p className="text-xs text-amber-700 mt-1">
+                All assets are currently assigned, faulty, or retired. Return an asset or add a new
+                one before creating an assignment.
+              </p>
+            </div>
+          ) : (
             <div className="mb-4">
               <label className="form-label flex items-center gap-1.5">
                 <PackageCheck size={13} className="text-emerald-600" />
-                Pick from Available Assets
+                Pick from Available Assets <span className="text-red-500">*</span>
               </label>
               <p className="form-helper -mt-0.5 mb-1">
                 {availableAssets.length} asset{availableAssets.length !== 1 ? 's' : ''} ready to assign
               </p>
               <select
                 onChange={handleAssetSelect}
-                defaultValue=""
+                value={pickedTag ?? ''}
                 className="form-input text-sm"
               >
                 <option value="" disabled>— Select an available asset —</option>
@@ -100,43 +118,38 @@ export default function AssignmentFormModal({
                   </option>
                 ))}
               </select>
+              {/* Hidden registered fields — values flow in via setValue() from handleAssetSelect
+                  so the form payload still includes assetTag/assetName/category, but the user
+                  can't edit them directly. */}
+              <input type="hidden" {...register('assetTag',  { required: 'Please select an asset' })} />
+              <input type="hidden" {...register('assetName', { required: true })} />
+              <input type="hidden" {...register('category',  { required: true })} />
+              {errors.assetTag && <p className="form-error mt-1">{errors.assetTag.message}</p>}
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="form-label">
-                Asset Tag <span className="text-red-500">*</span>
-              </label>
-              <input
-                {...register('assetTag', { required: 'Asset tag is required' })}
-                placeholder="e.g. INF-LT-0042"
-                className="form-input font-mono"
-              />
-              {errors.assetTag && <p className="form-error">{errors.assetTag.message}</p>}
+          {pickedTag && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="form-label">Asset Tag</label>
+                <div className="form-input font-mono bg-slate-50 text-slate-700 cursor-not-allowed select-all">
+                  {pickedTag}
+                </div>
+              </div>
+              <div>
+                <label className="form-label">Asset Name</label>
+                <div className="form-input bg-slate-50 text-slate-700 cursor-not-allowed">
+                  {pickedName}
+                </div>
+              </div>
+              <div>
+                <label className="form-label">Category</label>
+                <div className="form-input bg-slate-50 text-slate-700 cursor-not-allowed">
+                  {pickedCategory}
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="form-label">
-                Asset Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                {...register('assetName', { required: 'Asset name is required' })}
-                placeholder="e.g. Dell Latitude 5540"
-                className="form-input"
-              />
-              {errors.assetName && <p className="form-error">{errors.assetName.message}</p>}
-            </div>
-            <div>
-              <label className="form-label">
-                Category <span className="text-red-500">*</span>
-              </label>
-              <select {...register('category', { required: true })} className="form-input">
-                {CATEGORIES.map((c) => (
-                  <option key={`asgn-cat-${c}`} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-          </div>
+          )}
         </div>
 
         <hr className="border-slate-100" />

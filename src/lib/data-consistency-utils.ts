@@ -50,7 +50,7 @@ export async function validateDataConsistency() {
     // Check 2: Active/Overdue assignments should reference assets with status='Assigned'
     const { data: activeAssignments } = await supabase
       .from('assignments')
-      .select('id, asset_tag')
+      .select('id, asset_tag, status')
       .in('status', ['Active', 'Overdue']);
 
     if (activeAssignments) {

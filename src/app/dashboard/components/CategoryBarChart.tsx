@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Asset } from '@/lib/mockData';
+import { Asset } from '@/lib/supabase/types';
 
 interface CategoryBarChartProps {
   assets: Asset[];
@@ -22,12 +22,23 @@ function buildCategoryData(assets: Asset[]) {
   return Object.entries(counts).map(([name, v]) => ({ name, ...v }));
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+interface TooltipPayloadEntry {
+  name?: string | number;
+  value?: string | number;
+  fill?: string;
+}
+interface TooltipProps {
+  active?: boolean;
+  payload?: TooltipPayloadEntry[];
+  label?: string | number;
+}
+
+const CustomTooltip = ({ active, payload, label }: TooltipProps) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-white border border-slate-200 rounded-lg shadow-card p-3 text-xs">
       <p className="font-semibold text-slate-800 mb-2">{label}</p>
-      {payload.map((entry: any) => (
+      {payload.map((entry) => (
         <div key={`tt-${entry.name}`} className="flex items-center gap-2 mb-1">
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.fill }} />
           <span className="text-slate-600 capitalize">{entry.name}:</span>

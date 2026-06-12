@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Assignment } from '@/lib/mockData';
+import { Assignment } from '@/lib/supabase/types';
 import StatusBadge from '@/components/ui/StatusBadge';
-import { RotateCcw, AlertTriangle, ChevronLeft, ChevronRight, ClipboardList } from 'lucide-react';
+import { RotateCcw, AlertTriangle, ChevronLeft, ChevronRight, ClipboardList, CalendarClock } from 'lucide-react';
 
 interface AssignmentTableProps {
   assignments: Assignment[];
   onReturn: (assignment: Assignment) => void;
+  onEditReturnDate: (assignment: Assignment) => void;
 }
 
 function daysOverdue(expectedReturn: string): number {
@@ -27,7 +28,7 @@ function formatDate(dateStr: string) {
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50];
 
-export default function AssignmentTable({ assignments, onReturn }: AssignmentTableProps) {
+export default function AssignmentTable({ assignments, onReturn, onEditReturnDate }: AssignmentTableProps) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
@@ -137,14 +138,24 @@ export default function AssignmentTable({ assignments, onReturn }: AssignmentTab
                   <td className="table-td">
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       {(asgn.status === 'Active' || asgn.status === 'Overdue') && (
-                        <button
-                          onClick={() => onReturn(asgn)}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors active:scale-95"
-                          title="Check in — mark as returned"
-                        >
-                          <RotateCcw size={12} />
-                          Return
-                        </button>
+                        <>
+                          <button
+                            onClick={() => onReturn(asgn)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors active:scale-95"
+                            title="Check in — mark as returned"
+                          >
+                            <RotateCcw size={12} />
+                            Return
+                          </button>
+                          <button
+                            onClick={() => onEditReturnDate(asgn)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors active:scale-95"
+                            title="Edit expected return date"
+                          >
+                            <CalendarClock size={12} />
+                            Due date
+                          </button>
+                        </>
                       )}
                       {asgn.status === 'Returned' && (
                         <span className="text-xs text-slate-400 italic">Closed</span>

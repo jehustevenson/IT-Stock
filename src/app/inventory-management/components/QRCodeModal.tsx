@@ -2,7 +2,7 @@
 
 import React, { useRef, useCallback } from 'react';
 import Modal from '@/components/ui/Modal';
-import { Asset } from '@/lib/mockData';
+import { Asset } from '@/lib/supabase/types';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import { Download, Printer, Copy } from 'lucide-react';
 import { toast } from 'sonner';

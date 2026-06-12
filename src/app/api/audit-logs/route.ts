@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { checkAuth } from '@/lib/auth-utils';
+import { toAuditLog, type AuditAction } from '@/lib/supabase/types';
+import { sanitizeSearchTerm } from '@/lib/validators';
 
 export async function GET(request: NextRequest) {
-  // Check authorization - operator can read audit logs
-  const authResult = await checkAuth('operator');
+  // Read is allowed for any authenticated user — the dashboard's Recent Activity
+  // feed is shown to everyone. Export/write paths are gated more strictly elsewhere.
+  const authResult = await checkAuth('viewer');
   if (authResult instanceof NextResponse) return authResult;
 
   const supabase = await createClient();
@@ -27,7 +30,7 @@ export async function GET(request: NextRequest) {
 
   // Apply filters
   if (action) {
-    query = query.eq('action', action);
+    query = query.eq('action', action as AuditAction);
   }
 
   if (assetTag) {
@@ -48,9 +51,12 @@ export async function GET(request: NextRequest) {
 
   if (search) {
     // Search across multiple fields
-    query = query.or(
-      `asset_tag.ilike.%${search}%,asset_name.ilike.%${search}%,details.ilike.%${search}%,performed_by.ilike.%${search}%`
-    );
+    const term = sanitizeSearchTerm(search);
+    if (term) {
+      query = query.or(
+        `asset_tag.ilike.%${term}%,asset_name.ilike.%${term}%,details.ilike.%${term}%,performed_by.ilike.%${term}%`
+      );
+    }
   }
 
   const { data, error, count } = await query;
@@ -60,7 +66,7 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
-    data,
+    data: (data ?? []).map(toAuditLog),
     pagination: {
       offset,
       limit,

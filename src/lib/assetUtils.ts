@@ -3,6 +3,7 @@ import type { AssetCategory, SchoolSection } from '@/lib/supabase/types';
 export const CATEGORIES: AssetCategory[] = [
   'Laptop', 'Desktop', 'Monitor', 'Printer',
   'Networking', 'Accessory', 'Server', 'Phone',
+  'iPad', 'System Unit', 'Interactive Screen',
 ];
 
 export const SCHOOL_PREFIX: Record<SchoolSection, string> = {
@@ -18,8 +19,11 @@ export const CATEGORY_CODE: Record<AssetCategory, string> = {
   Printer:    'PR',
   Networking: 'NW',
   Accessory:  'AC',
-  Server:     'SV',
-  Phone:      'PH',
+  Server:        'SV',
+  Phone:         'PH',
+  'iPad':                'IP',
+  'System Unit':         'SU',
+  'Interactive Screen':  'IS',
 };
 
 export const SCHOOL_COLORS: Record<SchoolSection, string> = {
@@ -60,6 +64,7 @@ export function exportAssetsCSV(
     'Asset Tag', 'Name', 'Category', 'Serial Number',
     'Purchase Date', 'Status', 'School', 'Location',
     'Assigned To', 'Staff ID', 'Department', 'Notes',
+    'Supplier', 'Purchase Cost',
   ];
 
   const rows = assets.map((a) => [
@@ -75,6 +80,8 @@ export function exportAssetsCSV(
     a.assignedToId ?? '',
     a.department   ?? '',
     (a.notes ?? '').replace(/"/g, '""'),
+    (a.supplier ?? '').replace(/"/g, '""'),
+    a.purchaseCost ?? '',
   ].map((v) => `"${v}"`).join(','));
 
   const csv = [headers.join(','), ...rows].join('\n');

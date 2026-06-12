@@ -8,16 +8,18 @@ import { useAppData } from '@/lib/AppDataContext';
 import AssignmentTable from './AssignmentTable';
 import AssignmentFormModal from './AssignmentFormModal';
 import ReturnModal from './ReturnModal';
+import EditReturnDateModal from './EditReturnDateModal';
 
 const STATUSES: AssignmentStatus[] = ['Active', 'Returned', 'Overdue'];
 
 export default function AssignmentClient() {
-  const { assets, assignments, loading, error, addAssignment, returnAssignment } = useAppData();
+  const { assets, assignments, loading, error, addAssignment, returnAssignment, updateAssignmentReturn } = useAppData();
 
   const [search,       setSearch]       = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [returnTarget, setReturnTarget] = useState<Assignment | null>(null);
+  const [editTarget,   setEditTarget]   = useState<Assignment | null>(null);
 
   // Only Available assets can be assigned
   const availableAssets = useMemo(
@@ -75,6 +77,16 @@ export default function AssignmentClient() {
       toast.success('Asset checked in successfully');
     } catch (err) {
       toast.error((err as Error).message ?? 'Failed to process return');
+    }
+  }
+
+  async function handleEditReturnDate(id: string, expectedReturn: string) {
+    try {
+      await updateAssignmentReturn(id, expectedReturn);
+      setEditTarget(null);
+      toast.success('Expected return date updated');
+    } catch (err) {
+      toast.error((err as Error).message ?? 'Failed to update return date');
     }
   }
 
@@ -191,6 +203,7 @@ export default function AssignmentClient() {
           <AssignmentTable
             assignments={filtered}
             onReturn={(assignment) => setReturnTarget(assignment)}
+            onEditReturnDate={(assignment) => setEditTarget(assignment)}
           />
         )}
       </div>
@@ -209,6 +222,15 @@ export default function AssignmentClient() {
           onClose={() => setReturnTarget(null)}
           assignment={returnTarget}
           onConfirm={handleReturn}
+        />
+      )}
+
+      {editTarget && (
+        <EditReturnDateModal
+          open={!!editTarget}
+          onClose={() => setEditTarget(null)}
+          assignment={editTarget}
+          onConfirm={handleEditReturnDate}
         />
       )}
     </>

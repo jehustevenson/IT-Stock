@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { checkAuth } from '@/lib/auth-utils';
+import { validateAssetCreate, sanitizeSearchTerm } from '@/lib/validators';
+import type { AssetCategory, AssetStatus, SchoolSection } from '@/lib/supabase/types';
+
+// Pagination defaults
+const DEFAULT_LIMIT = 100;
+const MAX_LIMIT = 500;
 
 export async function GET(request: NextRequest) {
   const authResult = await checkAuth('viewer');
@@ -14,33 +20,57 @@ export async function GET(request: NextRequest) {
   const school   = searchParams.get('school');
   const search   = searchParams.get('search');
 
-  let query = supabase.from('assets').select('*').order('asset_tag', { ascending: true });
+  const limit = Math.min(
+    Math.max(parseInt(searchParams.get('limit') ?? String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT, 1),
+    MAX_LIMIT
+  );
+  const offset = Math.max(parseInt(searchParams.get('offset') ?? '0', 10) || 0, 0);
 
-  if (category) query = query.eq('category', category);
-  if (status)   query = query.eq('status',   status);
-  if (school)   query = query.eq('school',   school);
+  let query = supabase
+    .from('assets')
+    .select('*', { count: 'exact' })
+    .order('asset_tag', { ascending: true })
+    .range(offset, offset + limit - 1);
+
+  if (category) query = query.eq('category', category as AssetCategory);
+  if (status)   query = query.eq('status',   status   as AssetStatus);
+  if (school)   query = query.eq('school',   school   as SchoolSection);
   if (search) {
-    query = query.or(
-      `name.ilike.%${search}%,asset_tag.ilike.%${search}%,serial_number.ilike.%${search}%,location.ilike.%${search}%,assigned_to.ilike.%${search}%`
-    );
+    const term = sanitizeSearchTerm(search);
+    if (term) {
+      query = query.or(
+        `name.ilike.%${term}%,asset_tag.ilike.%${term}%,serial_number.ilike.%${term}%,location.ilike.%${term}%,assigned_to.ilike.%${term}%`
+      );
+    }
   }
 
-  const { data, error } = await query;
+  const { data, error, count } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
+
+  return NextResponse.json({
+    data,
+    pagination: {
+      offset,
+      limit,
+      total: count ?? 0,
+      hasMore: (offset + limit) < (count ?? 0),
+    },
+  });
 }
 
 export async function POST(request: NextRequest) {
   const authResult = await checkAuth('operator');
   if (authResult instanceof NextResponse) return authResult;
+  const { user } = authResult;
 
   const supabase = await createClient();
-  const body = await request.json();
+  const raw = await request.json().catch(() => null);
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const parsed = validateAssetCreate(raw);
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const body = parsed.value;
 
-  // FIX: check for duplicate asset_tag before inserting
+  // Check for duplicate asset_tag before inserting
   const { data: existing } = await supabase
     .from('assets')
     .select('id')
@@ -69,6 +99,8 @@ export async function POST(request: NextRequest) {
       assigned_to_id: body.assignedToId   ?? null,
       department:     body.department     ?? null,
       notes:          body.notes          ?? null,
+      supplier:       body.supplier       ?? null,
+      purchase_cost:  body.purchaseCost   ?? null,
     })
     .select()
     .single();

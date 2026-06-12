@@ -182,6 +182,31 @@ export default function AddDevicePage() {
                   />
                   {errors.location && <p className="form-error">{errors.location.message}</p>}
                 </div>
+                <div>
+                  <label className="form-label">Supplier</label>
+                  <p className="form-helper -mt-0.5 mb-1">Optional — vendor the device was bought from</p>
+                  <input
+                    {...register('supplier')}
+                    placeholder="e.g. CompuGhana"
+                    className="form-input"
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Purchase Cost</label>
+                  <p className="form-helper -mt-0.5 mb-1">Optional — amount it was bought for</p>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    {...register('purchaseCost', {
+                      setValueAs: (v) => (v === '' || v === null || v === undefined ? undefined : Number(v)),
+                      min: { value: 0, message: 'Cost cannot be negative' },
+                    })}
+                    placeholder="e.g. 4500.00"
+                    className="form-input"
+                  />
+                  {errors.purchaseCost && <p className="form-error">{errors.purchaseCost.message}</p>}
+                </div>
               </div>
             </div>
 

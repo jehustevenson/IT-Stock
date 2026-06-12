@@ -27,7 +27,14 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const isAuthPage = request.nextUrl.pathname.startsWith('/login');
+  const { pathname } = request.nextUrl;
+  // Pages reachable without a session. /reset-password must be listed: the
+  // recovery email lands there with a ?code= that is exchanged client-side,
+  // so at request time there's no session cookie yet.
+  const isAuthPage =
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/forgot-password') ||
+    pathname.startsWith('/reset-password');
 
   if (!user && !isAuthPage) {
     const url = request.nextUrl.clone();
@@ -35,7 +42,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && isAuthPage) {
+  // Only bounce signed-in users off /login — they must still be able to
+  // reach /reset-password (the recovery session counts as signed in).
+  if (user && pathname.startsWith('/login')) {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';
     return NextResponse.redirect(url);

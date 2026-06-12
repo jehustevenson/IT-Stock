@@ -3,7 +3,7 @@
 import React, { useEffect, useCallback } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import Modal from '@/components/ui/Modal';
-import { Asset, AssetCategory, AssetStatus, SchoolSection, SCHOOLS } from '@/lib/mockData';
+import { Asset, AssetCategory, AssetStatus, SchoolSection, SCHOOLS } from '@/lib/supabase/types';
 import { Loader2, RefreshCw } from 'lucide-react';
 
 type FormData = Omit<Asset, 'id'>;
@@ -18,6 +18,7 @@ interface AssetFormModalProps {
 
 const CATEGORIES: AssetCategory[] = [
   'Laptop', 'Desktop', 'Monitor', 'Printer', 'Networking', 'Accessory', 'Server', 'Phone',
+  'iPad', 'System Unit', 'Interactive Screen',
 ];
 const STATUSES: AssetStatus[] = ['Available', 'Assigned', 'Faulty', 'Retired'];
 
@@ -34,8 +35,11 @@ const CATEGORY_CODE: Record<AssetCategory, string> = {
   Printer:    'PR',
   Networking: 'NW',
   Accessory:  'AC',
-  Server:     'SV',
-  Phone:      'PH',
+  Server:        'SV',
+  Phone:         'PH',
+  'iPad':                'IP',
+  'System Unit':         'SU',
+  'Interactive Screen':  'IS',
 };
 
 function generateTag(school: SchoolSection, category: AssetCategory): string {
@@ -76,6 +80,8 @@ export default function AssetFormModal({
           assignedToId: defaultValues.assignedToId ?? '',
           department:   defaultValues.department   ?? '',
           notes:        defaultValues.notes        ?? '',
+          supplier:     defaultValues.supplier     ?? '',
+          purchaseCost: defaultValues.purchaseCost,
         }
       : {
           status:   'Available',
@@ -118,6 +124,8 @@ export default function AssetFormModal({
               assignedToId: defaultValues.assignedToId ?? '',
               department:   defaultValues.department   ?? '',
               notes:        defaultValues.notes        ?? '',
+              supplier:     defaultValues.supplier     ?? '',
+              purchaseCost: defaultValues.purchaseCost,
             }
           : { status: 'Available', category: 'Laptop' }
       );
@@ -195,6 +203,31 @@ export default function AssetFormModal({
                 className="form-input"
               />
               {errors.location && <p className="form-error">{errors.location.message}</p>}
+            </div>
+            <div>
+              <label className="form-label">Supplier</label>
+              <p className="form-helper -mt-0.5 mb-1">Optional — vendor the device was bought from</p>
+              <input
+                {...register('supplier')}
+                placeholder="e.g. CompuGhana"
+                className="form-input"
+              />
+            </div>
+            <div>
+              <label className="form-label">Purchase Cost</label>
+              <p className="form-helper -mt-0.5 mb-1">Optional — amount it was bought for</p>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                {...register('purchaseCost', {
+                  setValueAs: (v) => (v === '' || v === null || v === undefined ? undefined : Number(v)),
+                  min: { value: 0, message: 'Cost cannot be negative' },
+                })}
+                placeholder="e.g. 4500.00"
+                className="form-input"
+              />
+              {errors.purchaseCost && <p className="form-error">{errors.purchaseCost.message}</p>}
             </div>
           </div>
         </div>

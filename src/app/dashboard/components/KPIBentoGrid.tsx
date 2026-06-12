@@ -1,6 +1,6 @@
 import React from 'react';
 import { Package, CheckCircle, UserCheck, AlertOctagon, Archive } from 'lucide-react';
-import { Asset } from '@/lib/mockData';
+import { Asset } from '@/lib/supabase/types';
 
 interface KPIBentoGridProps {
   assets: Asset[];
